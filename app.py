@@ -170,7 +170,7 @@ if uploaded_file:
         for a in actions:
             st.markdown(f"- {a}")
 
-       # --------------------------------------------------
+      # --------------------------------------------------
 # Expense Category Breakdown – Pie + Risk Analysis
 # --------------------------------------------------
 st.divider()
@@ -187,15 +187,14 @@ if not expenses.empty:
     # -----------------------------
     st.subheader("Expense share")
 
-    st.pyplot(
-        expense_df.set_index("Category")
-        .plot.pie(
-            y="Amount",
-            figsize=(6, 6),
-            autopct=lambda p: f"{p:.1f}%",
-            legend=False
-        ).figure
-    )
+    fig = expense_df.set_index("Category").plot.pie(
+        y="Amount",
+        figsize=(6, 6),
+        autopct=lambda p: f"{p:.1f}%",
+        legend=False
+    ).figure
+
+    st.pyplot(fig)
 
     # -----------------------------
     # Top 2 cost drivers
@@ -207,25 +206,27 @@ if not expenses.empty:
     for _, row in top_costs.iterrows():
         share = (row["Amount"] / total_expense) * 100
         st.markdown(
-            f"- **{row['Category'].title()}**: ₹{row['Amount']:,.0f} "
+            f"- **{row['Category']}**: ₹{row['Amount']:,.0f} "
             f"({share:.1f}% of total expenses)"
         )
 
     # -----------------------------
     # Cost concentration risk
     # -----------------------------
-    top_share = (top_costs.iloc[0]["Amount"] / total_expense) * 100
-
     st.subheader("⚠️ Cost concentration risk")
+
+    top_share = (top_costs.iloc[0]["Amount"] / total_expense) * 100
+    top_name = top_costs.iloc[0]["Category"]
 
     if top_share > 50:
         st.error(
-            f"High risk: **{top_costs.iloc[0]['Category'].title()}** alone accounts for "
-            f"{top_share:.1f}% of total expenses. Cash flow is highly dependent on this cost."
+            f"High risk: **{top_name}** alone accounts for "
+            f"{top_share:.1f}% of total expenses. "
+            "Cash flow is highly dependent on this cost."
         )
     elif top_share > 35:
         st.warning(
-            f"Moderate risk: **{top_costs.iloc[0]['Category'].title()}** contributes "
+            f"Moderate risk: **{top_name}** contributes "
             f"{top_share:.1f}% of expenses. Monitor closely."
         )
     else:
