@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import timedelta
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from io import BytesIO
 
 # -----------------------------
 # Page config
@@ -27,21 +30,21 @@ st.markdown(
     """
 This system:
 
-- Analyzes your real transaction data  
+- Analyzes real transaction data  
 - Forecasts cash runway and cash-out date  
-- Flags overspending and cost concentration risks  
-- Tells you **what to cut first** when cash is tight  
+- Flags overspending & cost concentration risk  
+- Tells you **what to cut first**  
 
-*(No dashboards. No jargon. Just decisions.)*
+*(Built for founders & investors)*
 """
 )
 
 st.divider()
 
 # -----------------------------
-# Sample CSV download (FIXED)
+# Sample CSV download
 # -----------------------------
-sample_csv_text = """date,amount,type,description
+sample_csv = """date,amount,type,description
 2025-01-01,42000,Inflow,Sales
 2025-01-02,-15000,Outflow,Facebook Ads
 2025-01-03,-8000,Outflow,Salary
@@ -49,8 +52,8 @@ sample_csv_text = """date,amount,type,description
 """
 
 st.download_button(
-    label="📥 Download sample transactions CSV",
-    data=sample_csv_text.encode("utf-8"),
+    "📥 Download sample transactions CSV",
+    data=sample_csv.encode("utf-8"),
     file_name="sample_transactions.csv",
     mime="text/csv",
 )
@@ -68,9 +71,6 @@ uploaded_file = st.file_uploader(
 if not uploaded_file:
     st.stop()
 
-# -----------------------------
-# Load & validate data
-# -----------------------------
 df = pd.read_csv(uploaded_file)
 
 required_cols = {"date", "amount", "type", "description"}
@@ -85,9 +85,7 @@ df["amount"] = df["amount"].astype(float)
 # Core metrics
 # -----------------------------
 cash_today = df["amount"].sum()
-
 inflows = df[df["amount"] > 0]["amount"].sum()
-outflows = abs(df[df["amount"] < 0]["amount"].sum())
 
 daily_burn = (
     df[df["amount"] < 0]
@@ -100,9 +98,6 @@ daily_burn = (
 runway_days = int(cash_today / daily_burn) if daily_burn > 0 else 999
 cash_out_date = df["date"].max() + timedelta(days=runway_days)
 
-# -----------------------------
-# Advertising spend
-# -----------------------------
 ads_mask = df["description"].str.contains(
     "ad|facebook|google|instagram", case=False, na=False
 )
@@ -110,43 +105,36 @@ ad_spend = abs(df[ads_mask & (df["amount"] < 0)]["amount"].sum())
 ad_ratio = (ad_spend / inflows * 100) if inflows > 0 else 0
 
 # -----------------------------
-# AI COO Summary (meaningful)
+# AI COO Summary (on screen)
 # -----------------------------
 st.subheader("📊 AI COO Summary")
 
 st.markdown(
     f"""
 **Cash today:** ₹{cash_today:,.0f}  
+**Daily burn:** ₹{daily_burn:,.0f}  
+**Runway:** ~{runway_days} days  
+**Estimated cash-out date:** {cash_out_date.date()}  
 
-You are spending **₹{daily_burn:,.0f} per day**, giving you a runway of  
-**~{runway_days} days**.
-
-If nothing changes, cash may run out around:  
-🧨 **{cash_out_date.date()}**
-
-**Advertising intensity:**  
-Ads consume **{ad_ratio:.1f}% of revenue**.
+**Advertising spend:** {ad_ratio:.1f}% of revenue
 """
 )
 
 if ad_ratio > 25:
-    st.warning(
-        "High dependence on advertising. "
-        "If sales slow down, cash pressure will increase rapidly."
-    )
+    st.warning("High dependency on advertising. Sales volatility = cash risk.")
 
 st.divider()
 
 # -----------------------------
-# Expense category breakdown (simple & clean)
+# Expense breakdown (same logic)
 # -----------------------------
 st.subheader("📉 Expense category breakdown")
 
 expense_df = df[df["amount"] < 0].copy()
-expense_df["abs_amount"] = expense_df["amount"].abs()
+expense_df["abs"] = expense_df["amount"].abs()
 
-def map_category(desc):
-    d = desc.lower()
+def map_category(d):
+    d = d.lower()
     if "ad" in d or "facebook" in d or "google" in d or "instagram" in d:
         return "Advertising"
     if "salary" in d:
@@ -156,19 +144,13 @@ def map_category(desc):
     return "Other"
 
 expense_df["category"] = expense_df["description"].apply(map_category)
-
-expense_breakdown = (
-    expense_df.groupby("category")["abs_amount"]
-    .sum()
-    .sort_values(ascending=False)
-)
+expense_breakdown = expense_df.groupby("category")["abs"].sum().sort_values(ascending=False)
 
 fig, ax = plt.subplots(figsize=(4, 4))
 ax.pie(
     expense_breakdown.values,
-    labels=None,
     autopct="%1.0f%%",
-    pctdistance=0.75,
+    pctdistance=0.7,
     textprops={"fontsize": 9},
 )
 ax.legend(
@@ -178,38 +160,74 @@ ax.legend(
     fontsize=9,
 )
 ax.axis("equal")
-
 st.pyplot(fig)
 
-# -----------------------------
-# Cost concentration risk
-# -----------------------------
-top_two = expense_breakdown.iloc[:2].sum()
-total_exp = expense_breakdown.sum()
-share = top_two / total_exp * 100
-
-if share > 65:
-    st.warning(
-        f"⚠️ Cost concentration risk: "
-        f"Top 2 categories make up {share:.0f}% of total expenses."
-    )
+top_two_share = expense_breakdown.iloc[:2].sum() / expense_breakdown.sum() * 100
+if top_two_share > 65:
+    st.warning(f"⚠️ Cost concentration risk: Top 2 costs = {top_two_share:.0f}%")
 
 # -----------------------------
-# What should I cut first
+# Investor PDF export
 # -----------------------------
-st.subheader("✂️ What should you cut first?")
+st.divider()
+st.subheader("📄 Investor-ready PDF")
 
-largest_cost = expense_breakdown.index[0]
+def generate_investor_pdf():
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
 
-st.markdown(
-    f"""
-**Primary cut candidate:** **{largest_cost}**
+    y = height - 40
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(40, y, "Cash-Flow Investor Summary")
 
-This category gives the **fastest cash relief** with the least operational damage.
+    y -= 30
+    c.setFont("Helvetica", 11)
+    c.drawString(40, y, f"Cash today: ₹{cash_today:,.0f}")
+    y -= 18
+    c.drawString(40, y, f"Daily burn: ₹{daily_burn:,.0f}")
+    y -= 18
+    c.drawString(40, y, f"Runway: ~{runway_days} days")
+    y -= 18
+    c.drawString(40, y, f"Cash-out date: {cash_out_date.date()}")
 
-**Recommended order:**
-1. Reduce variable costs (ads, discretionary spend)
-2. Renegotiate fixed costs only if runway < 60 days
-3. Re-evaluate after 7 days
-"""
+    y -= 30
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(40, y, "Cost Structure")
+    y -= 18
+    c.setFont("Helvetica", 11)
+    c.drawString(40, y, f"Advertising spend: {ad_ratio:.1f}% of revenue")
+
+    y -= 30
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(40, y, "Key Risks")
+    y -= 18
+    c.setFont("Helvetica", 11)
+    if top_two_share > 65:
+        c.drawString(40, y, "• High cost concentration risk")
+        y -= 15
+    if runway_days < 90:
+        c.drawString(40, y, "• Runway below 90 days")
+
+    y -= 30
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(40, y, "COO Recommendation")
+    y -= 18
+    c.setFont("Helvetica", 11)
+    c.drawString(40, y, f"Primary cut: {expense_breakdown.index[0]}")
+    y -= 15
+    c.drawString(40, y, "Reduce variable costs before touching fixed commitments.")
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+pdf_buffer = generate_investor_pdf()
+
+st.download_button(
+    "📥 Download Investor PDF",
+    data=pdf_buffer,
+    file_name="cashflow_investor_summary.pdf",
+    mime="application/pdf",
 )
