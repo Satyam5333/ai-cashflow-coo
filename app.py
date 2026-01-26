@@ -26,6 +26,9 @@ st.markdown("""
     .risk-box {
         padding: 1rem; border-radius: 10px; background-color: #fff5f5; border: 1px solid #feb2b2; color: #c53030;
     }
+    .decision-block {
+        padding: 1.2rem; border-radius: 12px; background-color: #f0fdf4; border: 1px solid #bbf7d0; color: #166534;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -81,7 +84,7 @@ if uploaded_file:
         # 1. LOAD DATA
         df = load_transactions(uploaded_file)
         
-        # Smart Sign Correction: Ensuring inflows are (+) and outflows are (-)
+        # Smart Sign Correction
         def reconcile_signs(row):
             desc = str(row['description']).lower()
             val = abs(row['amount'])
@@ -104,6 +107,15 @@ if uploaded_file:
         with c3: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Ad Spend %</div><div class='kpi-value'>{metrics['ad_spend_pct']*100:.1f}%</div></div>", unsafe_allow_html=True)
         with c4: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Returns</div><div class='kpi-value'>{metrics['return_rate']*100:.1f}%</div></div>", unsafe_allow_html=True)
 
+        # NEW: 🚀 CASH-OUT DATE PREDICTION
+        st.divider()
+        if metrics['runway_months'] < 99:
+            cash_out_date = (datetime.now() + timedelta(days=int(metrics['runway_months'] * 30))).strftime('%d %b %Y')
+            st.error(f"⚠️ **Estimated Cash-out Date: {cash_out_date}**")
+            st.write("This is the date your bank balance is projected to hit zero based on current burn.")
+        else:
+            st.success("✅ **Sustainable Growth:** No cash-out date projected based on current inflows.")
+
         # 4. EXPENSE BREAKDOWN
         st.divider()
         st.subheader("📊 Spend Analysis")
@@ -124,29 +136,19 @@ if uploaded_file:
         with col_table:
             st.table(cat_df.sort_values(by="amount", ascending=False))
 
-        # NEW: 🚀 TOP 2 COST DRIVERS & CONCENTRATION RISK
+        # NEW: ✅ “WHAT SHOULD I CUT FIRST?” DECISION BLOCK
         st.divider()
-        st.subheader("⚠️ COO Risk Insights")
-        top_drivers = cat_df.sort_values(by="amount", ascending=False).head(2)
-        
-        col_risk_1, col_risk_2 = st.columns(2)
-        with col_risk_1:
-            st.write("**Top 2 Cost Drivers:**")
-            for idx, row in top_drivers.iterrows():
-                st.write(f"🔹 {row['Category']}: ₹{row['amount']:,.0f}")
-        
-        with col_risk_2:
-            total_expense = cat_df['amount'].sum()
-            primary_driver_pct = (top_drivers.iloc[0]['amount'] / total_expense) * 100
-            if primary_driver_pct > 50:
-                st.markdown(f"""
-                <div class='risk-box'>
-                    <strong>Cost Concentration Risk:</strong> {top_drivers.iloc[0]['Category']} accounts for 
-                    {primary_driver_pct:.1f}% of your total spend. Any disruption here is fatal.
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.write("✅ **Cost Dispersion:** Your expenses are diversified across categories.")
+        st.subheader("🎯 What should I cut first?")
+        st.markdown("""
+        <div class='decision-block'>
+            <strong>Priority 1: Underperforming Ad Sets</strong><br>
+            Check Meta/Google ROAS. Any campaign with ROAS < 1.5 is burning cash without return.<br><br>
+            <strong>Priority 2: Subscription Leaks</strong><br>
+            Review 'Other' expenses for SaaS tools you haven't used in 30 days.<br><br>
+            <strong>Priority 3: Return Management</strong><br>
+            If Returns > 15%, investigate shipping or quality issues before spending more on ads.
+        </div>
+        """, unsafe_allow_html=True)
 
         # 5. 60-DAY FORECAST
         st.divider()
