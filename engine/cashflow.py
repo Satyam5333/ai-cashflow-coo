@@ -2,26 +2,20 @@ import pandas as pd
 
 
 def calculate_cash_metrics(df: pd.DataFrame) -> dict:
-    """
-    Calculates core cash-flow metrics from transaction data.
-    Expected columns:
-    - date
-    - amount
-    - type (income / expense / ad_spend / return)  [optional]
-    """
-
     df = df.copy()
 
-    # Ensure date
-    df["date"] = pd.to_datetime(df["date"])
+    # Normalize columns
+    df.columns = [c.lower().strip() for c in df.columns]
 
-    # Sort by date
+    # Required columns check
+    if "date" not in df.columns or "amount" not in df.columns:
+        raise ValueError("CSV must contain 'date' and 'amount' columns")
+
+    df["date"] = pd.to_datetime(df["date"])
     df = df.sort_values("date")
 
-    # Cash today
     cash_today = df["amount"].sum()
 
-    # Last 30 days
     last_30 = df[df["date"] >= df["date"].max() - pd.Timedelta(days=30)]
 
     avg_daily_burn = (
@@ -30,15 +24,15 @@ def calculate_cash_metrics(df: pd.DataFrame) -> dict:
         else 0
     )
 
-    # Ad spend
+    sales = df[df["amount"] > 0]["amount"].sum()
+    expenses = abs(df[df["amount"] < 0]["amount"].sum())
+
+    ad_spend = 0
+    returns = 0
+
     if "type" in df.columns:
-        ad_spend = df[df["type"] == "ad_spend"]["amount"].abs().sum()
-        sales = df[df["type"] == "income"]["amount"].sum()
-        returns = df[df["type"] == "return"]["amount"].abs().sum()
-    else:
-        ad_spend = 0
-        sales = df[df["amount"] > 0]["amount"].sum()
-        returns = 0
+        ad_spend = abs(df[df["type"] == "ad_spend"]["amount"].sum())
+        returns = abs(df[df["type"] == "return"]["amount"].sum())
 
     ad_spend_pct = ad_spend / sales if sales > 0 else 0
     return_rate = returns / sales if sales > 0 else 0
