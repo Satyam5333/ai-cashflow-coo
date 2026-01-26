@@ -49,7 +49,7 @@ st.subheader("Know when your business may face cash trouble — and what to do n
 
 st.markdown("""
 ### What this tool does
-- **Analyzes** real transaction data from Bank, Tally, or Shopify
+- **Analyzes** Bank, Tally, or Shopify data to find "True Burn"
 - **Categorizes** spending into Ads, Salary, and Rent heuristics
 - **Forecasts** cash position for the next 60 days
 - **Generates** Investor-ready reports & Strategic Action Plans
@@ -83,9 +83,16 @@ uploaded_file = st.file_uploader("Upload Data (CSV, Excel, or PDF)", type=["csv"
 
 if uploaded_file:
     try:
+        # 1. LOAD DATA
         df = load_transactions(uploaded_file)
         
-        # Smart Sign Correction Layer
+        # --- FIX: COLUMN MAPPING FOR TALLY/BANK ERRORS ---
+        df.columns = [c.lower().strip() for c in df.columns]
+        if 'date' not in df.columns:
+            date_col = [c for c in df.columns if 'date' in c or 'time' in c][0]
+            df = df.rename(columns={date_col: 'date'})
+        
+        # Sign Correction
         def reconcile_signs(row):
             desc = str(row['description']).lower()
             val = abs(row['amount'])
@@ -94,17 +101,19 @@ if uploaded_file:
             return row['amount']
         
         df['amount'] = df.apply(reconcile_signs, axis=1)
+        
+        # 2. RUN METRICS (Fixed naming sync)
         metrics = calculate_business_metrics(df)
         cash_now = opening_balance + df["amount"].sum()
 
-        # 1. KPI CARDS
+        # 3. KPI CARDS
         c1, c2, c3, c4 = st.columns(4)
         with c1: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Cash Today</div><div class='kpi-value'>₹{cash_now:,.0f}</div></div>", unsafe_allow_html=True)
         with c2: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Runway</div><div class='kpi-value'>{metrics['runway_months']} Mo</div></div>", unsafe_allow_html=True)
         with c3: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Ad Spend %</div><div class='kpi-value'>{metrics['ad_spend_pct']*100:.1f}%</div></div>", unsafe_allow_html=True)
         with c4: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Returns</div><div class='kpi-value'>{metrics['return_rate']*100:.1f}%</div></div>", unsafe_allow_html=True)
 
-        # 2. CASH-OUT PREDICTION
+        # 4. CASH-OUT PREDICTION
         st.divider()
         cash_out_str = "Sustainable"
         if metrics['runway_months'] < 99:
@@ -114,7 +123,7 @@ if uploaded_file:
         else:
             st.success("✅ **Sustainable Growth Projected**")
 
-        # 3. SPEND ANALYSIS
+        # 5. SPEND ANALYSIS
         st.divider()
         st.subheader("📊 Spend Analysis")
         def categorize(desc):
@@ -132,7 +141,7 @@ if uploaded_file:
         with col_table:
             st.table(cat_df.sort_values(by="amount", ascending=False))
 
-        # 4. RISK INSIGHTS (COST DRIVERS)
+        # 6. RISK INSIGHTS (COST DRIVERS)
         st.divider()
         st.subheader("⚠️ COO Risk Insights")
         top_drivers = cat_df.sort_values(by="amount", ascending=False).head(2)
@@ -147,7 +156,7 @@ if uploaded_file:
                 st.markdown(f"<div class='risk-box'><strong>Cost Concentration Risk:</strong> {top_drivers.iloc[0]['Category']} is {primary_pct:.1f}% of spend.</div>", unsafe_allow_html=True)
             else: st.write("✅ **Cost Dispersion:** Your expenses are well diversified.")
 
-        # 5. FORECAST CHART
+        # 7. FORECAST CHART
         st.divider()
         st.subheader(f"📉 {forecast_horizon}-Day Cash Forecast")
         f_df = forecast_cashflow(cash_today=cash_now, start_date=df["date"].max(), days=forecast_horizon,
@@ -157,7 +166,7 @@ if uploaded_file:
         fig.add_hline(y=0, line_dash="dash", line_color="red")
         st.plotly_chart(fig, use_container_width=True)
 
-        # 6. PAID-FEEL ACTION PLAN
+        # 8. PAID-FEEL ACTION PLAN
         st.divider()
         st.subheader("📋 Executive Strategic Action Plan")
         st.markdown("<div class='paid-plan'>", unsafe_allow_html=True)
@@ -173,7 +182,7 @@ if uploaded_file:
             st.markdown(f"<span class='warning-text'>Inaction leads to cash exhaustion by {cash_out_str}.</span>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # 7. INVESTOR PDF GENERATOR
+        # 9. INVESTOR PDF GENERATOR
         st.divider()
         def generate_pdf():
             buf = BytesIO()
@@ -185,7 +194,7 @@ if uploaded_file:
             buf.seek(0); return buf
         st.download_button("📥 Download Investor PDF", data=generate_pdf(), file_name="COO_Report.pdf", mime="application/pdf")
 
-        # 8. STRATEGIC Q&A (NEW HARDCORE ADDITION)
+        # 10. STRATEGIC Q&A
         st.divider()
         st.subheader("🔍 Deep-Dive Analysis")
         q = st.text_input("Ask about your Tally/Bank data (e.g. 'total rent')")
@@ -198,9 +207,9 @@ if uploaded_file:
                 top = df.sort_values(by='amount').iloc[0]
                 st.write(f"🚩 **Top Expense:** {top['description']} (₹{abs(top['amount']):,.0f})")
 
-        # 9. AI ADVICE
+        # 11. AI ADVICE
         st.divider()
         st.info(generate_coo_advice(cash_now, metrics['runway_months'], metrics['ad_spend_pct'], metrics['return_rate'], generate_decisions(metrics)))
 
-    except Exception as e: st.error(f"Error: {e}")
+    except Exception as e: st.error(f"Error Analyzing Data: {e}")
 else: st.info("👋 Upload data to begin.")
