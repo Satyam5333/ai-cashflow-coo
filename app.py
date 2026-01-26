@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import pdfplumber
 from matplotlib.backends.backend_pdf import PdfPages
 from datetime import timedelta
 from io import BytesIO
@@ -8,7 +9,7 @@ from io import BytesIO
 st.set_page_config(page_title="AI Cash-Flow COO", layout="centered")
 
 # =================================================
-# NEW: Helper functions for universal upload
+# HELPER FUNCTIONS (ADD-ONLY)
 # =================================================
 def detect_column(df, keywords):
     for col in df.columns:
@@ -25,23 +26,23 @@ def normalize_bank_statement(df):
     credit_col = detect_column(df, ["credit", "deposit", "cr"])
     amount_col = detect_column(df, ["amount"])
 
-    normalized_rows = []
+    rows = []
 
     for _, row in df.iterrows():
         try:
             date = row[date_col] if date_col else None
             desc = row[desc_col] if desc_col else "Bank transaction"
 
-            if debit_col and not pd.isna(row[debit_col]):
+            if debit_col and pd.notna(row[debit_col]):
                 amt = -abs(float(row[debit_col]))
-            elif credit_col and not pd.isna(row[credit_col]):
+            elif credit_col and pd.notna(row[credit_col]):
                 amt = abs(float(row[credit_col]))
-            elif amount_col and not pd.isna(row[amount_col]):
+            elif amount_col and pd.notna(row[amount_col]):
                 amt = float(row[amount_col])
             else:
                 continue
 
-            normalized_rows.append({
+            rows.append({
                 "date": date,
                 "amount": amt,
                 "type": "Inflow" if amt > 0 else "Outflow",
@@ -50,8 +51,23 @@ def normalize_bank_statement(df):
         except Exception:
             continue
 
-    return pd.DataFrame(normalized_rows)
+    return pd.DataFrame(rows)
 
+
+def extract_table_from_pdf(uploaded_file):
+    rows = []
+    with pdfplumber.open(uploaded_file) as pdf:
+        for page in pdf.pages[:2]:
+            table = page.extract_table()
+            if table:
+                rows.extend(table)
+
+    if not rows or len(rows) < 2:
+        return None
+
+    headers = rows[0]
+    data = rows[1:]
+    return pd.DataFrame(data, columns=headers)
 
 # =================================================
 # UI POLISH (UNCHANGED)
@@ -100,7 +116,7 @@ st.write(
 st.divider()
 
 # =================================================
-# WHAT THIS TOOL DOES
+# TOOL EXPLANATION
 # =================================================
 st.subheader("What this tool does")
 st.markdown("""
@@ -136,32 +152,40 @@ st.download_button(
 st.divider()
 
 # =================================================
-# NEW: SOURCE TYPE SELECTOR
+# SOURCE TYPE
 # =================================================
 source_type = st.selectbox(
     "What are you uploading?",
-    [
-        "Bank Statement",
-        "Accounting / Tally Export",
-        "Custom CSV (already formatted)"
-    ]
+    ["Bank Statement", "Accounting / Tally Export", "Custom CSV (already formatted)"]
 )
 
 # =================================================
-# FILE UPLOAD
+# FILE UPLOAD (CSV + PDF)
 # =================================================
 uploaded_file = st.file_uploader(
-    "Upload your transactions CSV (bank / accounting / POS export)",
-    type=["csv"]
+    "Upload bank statement (CSV or PDF)",
+    type=["csv", "pdf"]
 )
 
 if not uploaded_file:
     st.stop()
 
-raw_df = pd.read_csv(uploaded_file)
+# =================================================
+# FILE READING LOGIC
+# =================================================
+if uploaded_file.name.lower().endswith(".pdf"):
+    raw_df = extract_table_from_pdf(uploaded_file)
+    if raw_df is None:
+        st.error(
+            "This PDF appears to be scanned or unreadable.\n\n"
+            "Please upload a CSV or Excel bank statement."
+        )
+        st.stop()
+else:
+    raw_df = pd.read_csv(uploaded_file)
 
 # =================================================
-# NEW: NORMALIZATION LOGIC
+# NORMALIZATION
 # =================================================
 if source_type == "Bank Statement":
     df = normalize_bank_statement(raw_df)
@@ -171,7 +195,7 @@ else:
 
 required_cols = {"date", "amount", "type", "description"}
 if not required_cols.issubset(df.columns):
-    st.error("Data could not be understood. Please check the uploaded file format.")
+    st.error("Uploaded file could not be understood.")
     st.stop()
 
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
@@ -223,25 +247,21 @@ with c4:
 st.divider()
 
 # =================================================
-# AI COO ANALYSIS (UNCHANGED)
+# AI COO SUMMARY
 # =================================================
 st.subheader("🧠 AI COO Analysis")
 
 st.markdown(f"""
-### Cash position
-You currently hold **₹{cash_today:,.0f}** in net cash.  
-Your average daily operating burn is **₹{daily_burn:,.0f}**, giving you approximately **{runway_days} days of runway**.
+You have **₹{cash_today:,.0f}** in net cash.
 
+At the current burn of **₹{daily_burn:,.0f}/day**, your runway is **~{runway_days} days**  
 Expected cash-out date: **{cash_out_date.date()}**
-""")
 
-st.markdown(f"""
-### Spending structure insight
-Advertising accounts for **{ad_ratio:.1f}% of revenue**, making it the largest variable cost driver.
+Advertising consumes **{ad_ratio:.1f}% of revenue**, making it the largest variable risk.
 """)
 
 # =================================================
-# EXPENSE BREAKDOWN (UNCHANGED)
+# EXPENSE BREAKDOWN
 # =================================================
 st.divider()
 st.subheader("📉 Expense category breakdown")
@@ -268,7 +288,7 @@ ax.axis("equal")
 st.pyplot(fig)
 
 # =================================================
-# INVESTOR PDF (UNCHANGED)
+# INVESTOR PDF
 # =================================================
 st.divider()
 st.subheader("📄 Investor-ready cash narrative")
