@@ -4,31 +4,30 @@ def generate_decisions(metrics: dict) -> dict:
     
     ad_spend_pct = metrics.get("ad_spend_pct", 0)
     return_rate = metrics.get("return_rate", 0)
-    runway = metrics.get("runway_months") # This is what we updated
+    # We use runway_months because metrics.py provides that
+    runway = metrics.get("runway_months", 0)
 
     # 1. ADVERTISING EFFICIENCY
     if ad_spend_pct > 0.30: 
-        risks.append("Ad spend is consuming over 30% of revenue.")
-        actions.append("Audit ad sets and stop any with ROAS below 2.0.")
+        risks.append("High ad spend (over 30% of sales).")
+        actions.append("Review ad performance and pause campaigns with low ROAS.")
 
     # 2. PRODUCT QUALITY
     if return_rate > 0.15:
         risks.append(f"High Return Rate ({return_rate*100:.1f}%).")
-        actions.append("Analyze return reasons; pause high-return SKUs.")
+        actions.append("Investigate quality issues or shipping damage.")
 
-    # 3. LIQUIDITY & RUNWAY (FIXED ERROR LOGIC HERE)
-    # Check if runway is a number before comparing
-    if isinstance(runway, (int, float)):
-        if runway < 3:
-            risks.append(f"CRITICAL: Cash runway is only {runway} months.")
-            actions.append("Negotiate 30-day payment extensions with vendors.")
-            actions.append("Identify non-essential SaaS to cancel.")
-    elif runway == 0:
-        risks.append("CRITICAL: Negative cash flow detected.")
-        actions.append("Immediate cost-cutting required.")
+    # 3. LIQUIDITY & RUNWAY
+    # Now safely comparing numbers only
+    if runway < 3:
+        risks.append(f"Low Runway: Only {runway} months of cash left.")
+        actions.append("Reduce non-essential expenses immediately.")
+        actions.append("Negotiate longer payment terms with suppliers.")
+    elif runway >= 99:
+        actions.append("Cash position is stable and positive.")
 
     if not risks:
-        actions.append("Maintain current trajectory. Review again in 7 days.")
+        actions.append("Financial health is good. Maintain current strategy.")
 
     return {
         "risks": risks,
