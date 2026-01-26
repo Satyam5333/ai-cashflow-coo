@@ -76,15 +76,12 @@ if uploaded_file:
         # 1. LOAD DATA
         df = load_transactions(uploaded_file)
         
-        # --- SMART SIGN CORRECTION LAYER ---
-        # Ensures math direction is correct based on keywords
+        # Smart Sign Correction: Ensuring inflows are (+) and outflows are (-)
         def reconcile_signs(row):
             desc = str(row['description']).lower()
             val = abs(row['amount'])
-            # Keywords that must be OUTFLOWS (-)
             if any(k in desc for k in ["ad", "facebook", "meta", "google", "rent", "salary", "refund", "payout fee"]):
                 return -val
-            # Keywords that must be INFLOWS (+)
             if any(k in desc for k in ["payout", "sale", "deposit", "credit"]):
                 return val
             return row['amount']
@@ -104,27 +101,25 @@ if uploaded_file:
 
         # 4. EXPENSE BREAKDOWN
         st.divider()
-        st.subheader("📊 Spend Distribution")
-        
+        st.subheader("📊 Spend Analysis")
         def categorize(desc):
             d = str(desc).lower()
             if any(x in d for x in ["ad", "facebook", "meta", "google"]): return "Ads"
             if any(x in d for x in ["salary", "wage"]): return "Salary"
             if any(x in d for x in ["rent", "office"]): return "Rent"
-            if any(x in d for x in ["software", "saas", "shopify"]): return "Software"
             return "Other"
 
         expenses = df[df["amount"] < 0].copy()
         expenses["Category"] = expenses["description"].apply(categorize)
         cat_df = expenses.groupby("Category")["amount"].sum().abs().reset_index()
-
-        col_a, col_b = st.columns([1, 1])
-        with col_a:
+        
+        col_pie, col_table = st.columns([2, 1])
+        with col_pie:
             st.plotly_chart(px.pie(cat_df, values='amount', names='Category', hole=0.4), use_container_width=True)
-        with col_b:
+        with col_table:
             st.table(cat_df.sort_values(by="amount", ascending=False))
 
-        # 5. FORECAST
+        # 5. 60-DAY FORECAST
         st.divider()
         st.subheader(f"📉 {forecast_horizon}-Day Cash Forecast")
         f_df = forecast_cashflow(
@@ -135,11 +130,11 @@ if uploaded_file:
             cod_delay_days=cod_delay, return_rate=metrics["return_rate"]
         )
         
-        fig = px.line(f_df, x="date", y="closing_cash", title="Liquidity Trajectory")
-        fig.add_hline(y=0, line_dash="dash", line_color="red")
+        fig = px.line(f_df, x="date", y="closing_cash", title="Liquidity Position")
+        fig.add_hline(y=0, line_dash="dash", line_color="red", annotation_text="Insolvency Point")
         st.plotly_chart(fig, use_container_width=True)
 
-        # 6. ADVICE
+        # 6. AI ADVICE
         st.divider()
         st.subheader("🤖 Executive Strategy Report")
         advice_text = generate_coo_advice(
