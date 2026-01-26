@@ -32,6 +32,9 @@ st.markdown("""
     .decision-block {
         padding: 1.2rem; border-radius: 12px; background-color: #f0fdf4; border: 1px solid #bbf7d0; color: #166534;
     }
+    .action-plan {
+        background-color: #f8fafc; padding: 1.5rem; border-radius: 15px; border: 1px solid #e2e8f0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -46,7 +49,7 @@ st.markdown("""
 - **Analyzes** real transaction data to find your "True Burn"
 - **Categorizes** spending into Ads, Salary, and Rent heuristics
 - **Forecasts** cash position for the next 60 days
-- **Generates** Investor-ready reports with Audit Trails
+- **Generates** Founder Action Plans & Investor Reports
 """)
 
 st.markdown("---")
@@ -156,7 +159,28 @@ if uploaded_file:
         )
         st.plotly_chart(px.line(f_df, x="date", y="closing_cash", title="Liquidity Position"), use_container_width=True)
 
-        # NEW: 🚀 IMPROVED INVESTOR PDF GENERATOR
+        # NEW: 🚀 FOUNDER ACTION PLAN BLOCK
+        st.divider()
+        st.subheader("📋 Founder 30-Day Action Plan")
+        st.markdown("<div class='action-plan'>", unsafe_allow_html=True)
+        
+        col_immed, col_strat = st.columns(2)
+        with col_immed:
+            st.markdown("### 🔴 Phase 1: Immediate (0-7 Days)")
+            st.markdown(f"- **Cash Audit:** Reconcile current bank balance of ₹{cash_now:,.0f} with pending COD payments.")
+            if metrics['ad_spend_pct'] > 0.4:
+                st.markdown("- **Marketing Kill-Switch:** Immediately pause Meta/Google campaigns with ROAS < 1.0 to preserve cash.")
+            st.markdown("- **Vendor Extension:** Contact top 2 suppliers to request a 7-day payment extension.")
+
+        with col_strat:
+            st.markdown("### 🔵 Phase 2: Strategic (7-30 Days)")
+            st.markdown(f"- **Return Reduction:** Set up an automated RTO verification system for COD orders to lower your {metrics['return_rate']*100:.1f}% return rate.")
+            st.markdown("- **Fixed Cost Trim:** Review 'Other' expenses for SaaS recurring charges that can be moved to annual plans or cancelled.")
+            st.markdown("- **Inventory Check:** Liquidate slow-moving SKUs at a discount to boost immediate cash inflows.")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # 6. INVESTOR PDF GENERATOR
         st.divider()
         st.subheader("📄 Investor-ready cash narrative")
         
@@ -165,8 +189,6 @@ if uploaded_file:
             with PdfPages(buffer) as pdf:
                 fig = plt.figure(figsize=(8.5, 11))
                 plt.axis("off")
-                
-                # Report Header & KPIs
                 content = f"""
 CASH-FLOW STRATEGIC SUMMARY
 Generated: {datetime.now().strftime('%Y-%m-%d')}
@@ -177,18 +199,11 @@ Generated: {datetime.now().strftime('%Y-%m-%d')}
 - Estimated Solvency Date: {cash_out_str}
 
 2. OPERATIONAL EFFICIENCY
-- Ad Intensity (Ad Spend/Sales): {metrics['ad_spend_pct']*100:.1f}%
-- Order Friction (Return Rate): {metrics['return_rate']*100:.1f}%
+- Ad Intensity: {metrics['ad_spend_pct']*100:.1f}%
+- Return Friction: {metrics['return_rate']*100:.1f}%
 
-3. PROJECTED CASH MOVEMENT (60-DAY OUTLOOK)
-- Est. Monthly Inflow: ₹{metrics['avg_daily_sales'] * 30:,.0f}
-- Est. Monthly Outflow: ₹{(metrics['avg_daily_ad_spend'] + metrics['avg_daily_fixed_cost']) * 30:,.0f}
-- Est. Monthly Net Burn: ₹{metrics['monthly_burn']:,.0f}
-
-AUDIT TRAIL & CATEGORY BREAKDOWN:
+3. AUDIT TRAIL:
 {cat_df.sort_values(by='amount', ascending=False).to_string(index=False)}
-
-Note: This forecast assumes current operating heuristics remain constant.
                 """
                 plt.text(0.1, 0.95, content, fontsize=11, family='monospace', va='top')
                 pdf.savefig(fig)
@@ -196,14 +211,9 @@ Note: This forecast assumes current operating heuristics remain constant.
             buffer.seek(0)
             return buffer
 
-        st.download_button(
-            "📥 Download Refined Investor PDF",
-            data=generate_investor_pdf(),
-            file_name=f"COO_Cash_Report_{datetime.now().strftime('%Y%m%d')}.pdf",
-            mime="application/pdf",
-        )
+        st.download_button("📥 Download Investor PDF", data=generate_investor_pdf(), file_name="COO_Report.pdf", mime="application/pdf")
 
-        # 6. AI ADVICE
+        # 7. AI ADVICE
         st.divider()
         st.subheader("🤖 Executive Strategy Report")
         advice_text = generate_coo_advice(cash_now, metrics['runway_months'], metrics['ad_spend_pct'], metrics['return_rate'], generate_decisions(metrics))
