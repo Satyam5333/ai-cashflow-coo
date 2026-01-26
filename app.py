@@ -132,25 +132,25 @@ if uploaded_file:
             st.write("• " + i)
 
       # --- Expense category pie chart (clean & compact) ---
-fig, ax = plt.subplots(figsize=(5, 5))  # 👈 smaller size
+      fig, ax = plt.subplots(figsize=(5, 5))  # 👈 smaller size
 
-labels = list(expense_breakdown.keys())
-values = list(expense_breakdown.values())
+      labels = list(expense_breakdown.keys())
+      values = list(expense_breakdown.values())
 
-ax.pie(
-    values,
-    labels=labels,
-    autopct='%1.1f%%',
-    startangle=90,
-    pctdistance=0.75,     # 👈 percentages move inward
-    labeldistance=1.1,    # 👈 labels move outward
-    wedgeprops={'linewidth': 1, 'edgecolor': 'white'}
-)
+      ax.pie(
+      values,
+      labels=labels,
+      autopct='%1.1f%%',
+      startangle=90,
+      pctdistance=0.75,     # 👈 percentages move inward
+      labeldistance=1.1,    # 👈 labels move outward
+      wedgeprops={'linewidth': 1, 'edgecolor': 'white'}
+      )
 
-ax.set_title("Expense category breakdown", fontsize=14)
-ax.axis('equal')  # keeps it circular
+      ax.set_title("Expense category breakdown", fontsize=14)
+      ax.axis('equal')  # keeps it circular
 
-st.pyplot(fig)
+      st.pyplot(fig)
 
         # -------------------------
         # Cost concentration risk
