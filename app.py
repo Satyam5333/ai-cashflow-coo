@@ -111,9 +111,15 @@ st.divider()
 # FILE UPLOAD (CSV / EXCEL ONLY — STABLE)
 # =================================================
 uploaded_file = st.file_uploader(
-    "Upload transactions (CSV / Excel)",
-    type=["csv", "xlsx"]
+    "Upload transactions (CSV / Excel / PDF)",
+    type=["csv", "xlsx", "pdf"]
 )
+if uploaded_file and uploaded_file.name.lower().endswith(".pdf"):
+    st.warning(
+        "⚠️ PDF support depends on format.\n"
+        "For guaranteed accuracy, please upload CSV or Excel."
+    )
+
 
 if not uploaded_file:
     st.stop()
