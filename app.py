@@ -26,9 +26,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# =================================================
 # ---------------- HEADER ----------------
-# =================================================
 st.title("🧠 Cash-Flow Early Warning System for SMEs")
 st.subheader("Know when your business may face cash trouble — and what to do next.")
 
@@ -36,12 +34,10 @@ st.markdown("""
 ### What this tool does
 - **Analyzes** real transaction data
 - **Categorizes** Ads, Salary, and Rent
-- **Simulates** how expense cuts extend your runway
+- **Forecasts** cash position for the next 60 days
 """)
 
-# =================================================
 # 📥 SAMPLE CSV DOWNLOAD
-# =================================================
 sample_data = """date,amount,type,description
 2026-01-01,150000,inflow,Shopify Payout
 2026-01-02,-45000,outflow,Meta Ads - Facebook/Insta
@@ -50,31 +46,23 @@ sample_data = """date,amount,type,description
 2026-01-12,-5000,outflow,Shopify Subscription
 2026-01-15,120000,inflow,Shopify Payout
 2026-01-18,-8000,outflow,Customer Refund
-2026-01-20,-35000,outflow,Meta Ads - Retargeting
-2026-01-25,-4000,outflow,Google Workspace Tool
 """
-st.download_button("📥 Download Sample D2C Transactions CSV", data=sample_data, file_name="sample_d2c_transactions.csv", mime="text/csv")
-
+st.download_button("📥 Download Sample CSV", data=sample_data, file_name="sample.csv", mime="text/csv")
 st.markdown("---")
 
-# =================================================
-# SIDEBAR CONTROLS
-# =================================================
+# SIDEBAR
 st.sidebar.header("🕹️ COO Simulation")
-opening_balance = st.sidebar.number_input("Starting Bank Balance (INR)", value=200000)
-cod_delay = st.sidebar.slider("Avg COD Payment Delay (Days)", 0, 30, 7)
-forecast_horizon = st.sidebar.slider("Forecast Look-ahead (Days)", 30, 90, 60)
+opening_bal = st.sidebar.number_input("Starting Bank Balance (INR)", value=200000)
+cod_delay = st.sidebar.slider("Avg COD Delay (Days)", 0, 30, 7)
 
-# =================================================
 # MAIN LOGIC
-# =================================================
 uploaded_file = st.file_uploader("Upload Transactions", type=["csv", "pdf"])
 
 if uploaded_file:
     try:
         df = load_transactions(uploaded_file)
         metrics = calculate_business_metrics(df)
-        cash_now = opening_balance + df["amount"].sum()
+        cash_now = opening_bal + df["amount"].sum()
 
         # 1. KPI CARDS
         c1, c2, c3, c4 = st.columns(4)
@@ -83,50 +71,45 @@ if uploaded_file:
         with c3: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Ad Spend %</div><div class='kpi-value'>{metrics['ad_spend_pct']*100:.1f}%</div></div>", unsafe_allow_html=True)
         with c4: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Returns</div><div class='kpi-value'>{metrics['return_rate']*100:.1f}%</div></div>", unsafe_allow_html=True)
 
-        # 2. EXPENSE BREAKDOWN
+        # 2. SPEND ANALYSIS
         st.divider()
         st.subheader("📊 Spend Analysis")
         def categorize(desc):
             d = str(desc).lower()
             if any(x in d for x in ["ad", "facebook", "meta", "google"]): return "Ads"
-            if any(x in d for x in ["salary", "wage", "payroll"]): return "Salary"
-            if any(x in d for x in ["rent", "office", "lease"]): return "Rent"
+            if any(x in d for x in ["salary", "wage"]): return "Salary"
+            if any(x in d for x in ["rent", "office"]): return "Rent"
             return "Other"
         df["Category"] = df["description"].apply(categorize)
         cat_df = df[df["amount"] < 0].groupby("Category")["amount"].sum().abs().reset_index()
         st.plotly_chart(px.pie(cat_df, values='amount', names='Category', hole=0.4), use_container_width=True)
 
-        # 3. WHAT-IF OPTIMIZATION (NEW)
+        # 3. WHAT-IF
         st.divider()
         st.subheader("🛠️ What-If Optimization")
-        st.write("How much runway do you gain by cutting costs?")
-        
-        cut_pct = st.select_slider("Reduce Total Monthly Expenses by:", options=[0, 10, 20, 30, 40, 50], value=0)
-        
-        # Recalculate Adjusted Runway
+        cut_pct = st.select_slider("Reduce Total Monthly Expenses by %:", options=[0, 10, 20, 30, 40, 50], value=0)
         new_burn = metrics["monthly_burn"] * (1 - (cut_pct / 100))
         if new_burn > 0:
-            new_runway = round(cash_now / new_burn, 1)
-            st.success(f"By cutting expenses by {cut_pct}%, your runway extends to **{new_runway} months**!")
-        else:
-            st.success("You have achieved a Cash Positive state!")
+            st.success(f"By cutting expenses by {cut_pct}%, runway extends to **{round(cash_now/new_burn, 1)} months**!")
 
-        # 4. FORECAST
+        # 4. LINE CHART (FORECAST)
         st.divider()
-        st.subheader(f"📉 {forecast_horizon}-Day Forecast")
-        f_df = forecast_cashflow(cash_today=cash_now, start_date=df["date"].max(), days=forecast_horizon,
-                               avg_daily_sales=metrics["avg_daily_sales"], avg_daily_ad_spend=metrics["avg_daily_ad_spend"], 
-                               avg_daily_fixed_cost=metrics["avg_daily_fixed_cost"], cod_delay_days=cod_delay, return_rate=metrics["return_rate"])
-        st.plotly_chart(px.line(f_df, x="date", y="closing_cash"), use_container_width=True)
+        st.subheader("📉 60-Day Cash Forecast")
+        f_df = forecast_cashflow(
+            cash_today=cash_now, start_date=df["date"].max(), days=60,
+            avg_daily_sales=metrics["avg_daily_sales"], 
+            avg_daily_ad_spend=metrics["avg_daily_ad_spend"], 
+            avg_daily_fixed_cost=metrics["avg_daily_fixed_cost"], 
+            cod_delay_days=cod_delay, return_rate=metrics["return_rate"]
+        )
+        st.plotly_chart(px.line(f_df, x="date", y="closing_cash", title="Projected Liquidity"), use_container_width=True)
 
-        # 5. ADVICE
+        # 5. AI ADVICE
         st.divider()
-        st.subheader("🤖 Strategy Report")
-        advice_text = generate_coo_advice(cash_today=cash_now, runway_days=metrics["runway_months"], 
-                                         ad_spend_pct=metrics["ad_spend_pct"], return_rate=metrics["return_rate"], decisions=generate_decisions(metrics))
-        st.info(advice_text)
+        st.subheader("🤖 Executive Strategy Report")
+        decisions = generate_decisions(metrics)
+        advice = generate_coo_advice(cash_now, metrics["runway_months"], metrics["ad_spend_pct"], metrics["return_rate"], decisions)
+        st.info(advice)
         
     except Exception as e:
         st.error(f"Error: {e}")
-else:
-    st.info("Upload data to begin.")
