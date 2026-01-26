@@ -15,7 +15,12 @@ st.markdown("""
 
 /* Overall page background */
 html, body {
-    background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 40%, #ffffff 100%);
+    background: linear-gradient(
+        180deg,
+        #eef2ff 0%,
+        #f8fafc 40%,
+        #ffffff 100%
+    );
 }
 
 /* Improve content spacing */
