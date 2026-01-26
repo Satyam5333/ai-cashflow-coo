@@ -35,8 +35,8 @@ st.subheader("Know when your business may face cash trouble — and what to do n
 st.markdown("""
 ### What this tool does
 - **Analyzes** real transaction data
-- **Breakdown** expenses into Ads, Salary, and Rent
-- **Forecasts** cash for the next 60 days
+- **Categorizes** Ads, Salary, and Rent
+- **Simulates** how expense cuts extend your runway
 """)
 
 # =================================================
@@ -53,7 +53,6 @@ sample_data = """date,amount,type,description
 2026-01-20,-35000,outflow,Meta Ads - Retargeting
 2026-01-25,-4000,outflow,Google Workspace Tool
 """
-
 st.download_button("📥 Download Sample D2C Transactions CSV", data=sample_data, file_name="sample_d2c_transactions.csv", mime="text/csv")
 
 st.markdown("---")
@@ -84,42 +83,45 @@ if uploaded_file:
         with c3: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Ad Spend %</div><div class='kpi-value'>{metrics['ad_spend_pct']*100:.1f}%</div></div>", unsafe_allow_html=True)
         with c4: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Returns</div><div class='kpi-value'>{metrics['return_rate']*100:.1f}%</div></div>", unsafe_allow_html=True)
 
-        # 2. EXPENSE BREAKDOWN SECTION (NEW)
+        # 2. EXPENSE BREAKDOWN
         st.divider()
-        st.subheader("📊 Expense Category Breakdown")
-        
-        # Categorization Logic
+        st.subheader("📊 Spend Analysis")
         def categorize(desc):
             d = str(desc).lower()
-            if any(x in d for x in ["ad", "facebook", "meta", "google", "marketing"]): return "Ads"
+            if any(x in d for x in ["ad", "facebook", "meta", "google"]): return "Ads"
             if any(x in d for x in ["salary", "wage", "payroll"]): return "Salary"
             if any(x in d for x in ["rent", "office", "lease"]): return "Rent"
-            if any(x in d for x in ["software", "saas", "tool", "aws", "shopify"]): return "Software/SaaS"
-            return "Other Expenses"
+            return "Other"
+        df["Category"] = df["description"].apply(categorize)
+        cat_df = df[df["amount"] < 0].groupby("Category")["amount"].sum().abs().reset_index()
+        st.plotly_chart(px.pie(cat_df, values='amount', names='Category', hole=0.4), use_container_width=True)
 
-        expenses = df[df["amount"] < 0].copy()
-        expenses["Category"] = expenses["description"].apply(categorize)
-        cat_df = expenses.groupby("Category")["amount"].sum().abs().reset_index()
-
-        col_a, col_b = st.columns([1, 1])
-        with col_a:
-            fig_pie = px.pie(cat_df, values='amount', names='Category', hole=0.4, title="Spend Distribution")
-            st.plotly_chart(fig_pie, use_container_width=True)
-        with col_b:
-            st.write("### Expense Details")
-            st.table(cat_df.sort_values(by="amount", ascending=False))
-
-        # 3. FORECAST
+        # 3. WHAT-IF OPTIMIZATION (NEW)
         st.divider()
-        st.subheader(f"📉 {forecast_horizon}-Day Cash Forecast")
+        st.subheader("🛠️ What-If Optimization")
+        st.write("How much runway do you gain by cutting costs?")
+        
+        cut_pct = st.select_slider("Reduce Total Monthly Expenses by:", options=[0, 10, 20, 30, 40, 50], value=0)
+        
+        # Recalculate Adjusted Runway
+        new_burn = metrics["monthly_burn"] * (1 - (cut_pct / 100))
+        if new_burn > 0:
+            new_runway = round(cash_now / new_burn, 1)
+            st.success(f"By cutting expenses by {cut_pct}%, your runway extends to **{new_runway} months**!")
+        else:
+            st.success("You have achieved a Cash Positive state!")
+
+        # 4. FORECAST
+        st.divider()
+        st.subheader(f"📉 {forecast_horizon}-Day Forecast")
         f_df = forecast_cashflow(cash_today=cash_now, start_date=df["date"].max(), days=forecast_horizon,
                                avg_daily_sales=metrics["avg_daily_sales"], avg_daily_ad_spend=metrics["avg_daily_ad_spend"], 
                                avg_daily_fixed_cost=metrics["avg_daily_fixed_cost"], cod_delay_days=cod_delay, return_rate=metrics["return_rate"])
         st.plotly_chart(px.line(f_df, x="date", y="closing_cash"), use_container_width=True)
 
-        # 4. ADVICE
+        # 5. ADVICE
         st.divider()
-        st.subheader("🤖 Executive Strategy Report")
+        st.subheader("🤖 Strategy Report")
         advice_text = generate_coo_advice(cash_today=cash_now, runway_days=metrics["runway_months"], 
                                          ad_spend_pct=metrics["ad_spend_pct"], return_rate=metrics["return_rate"], decisions=generate_decisions(metrics))
         st.info(advice_text)
