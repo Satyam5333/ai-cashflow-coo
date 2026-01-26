@@ -6,39 +6,6 @@ from datetime import timedelta
 from io import BytesIO
 
 st.set_page_config(page_title="AI Cash-Flow COO", layout="centered")
-# =================================================
-# PHASE 2 — SIDEBAR NAVIGATION (ADD-ONLY, NO LOGIC CHANGE)
-# =================================================
-st.sidebar.markdown("## 🧭 Views")
-
-st.sidebar.radio(
-    "",
-    [
-        "🧠 Founder View (default)",
-        "📄 Investor View",
-        "📊 Ops View (coming soon)",
-        "🔒 Pro Features"
-    ],
-    index=0
-)
-
-st.sidebar.divider()
-
-st.sidebar.markdown(
-    """
-**Founder View**  
-Full tactical cash-control view.
-
-**Investor View**  
-High-level narrative only *(coming soon)*.
-
-**Ops View**  
-Execution metrics *(placeholder)*.
-
-**Pro Features**  
-Advanced controls 🔒
-"""
-)
 
 # =================================================
 # UI POLISH (GLOBAL, ADD-ONLY, SAFE)
