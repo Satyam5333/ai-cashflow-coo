@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import timedelta
+import io
 
 # -----------------------------
 # Page config
@@ -9,12 +10,53 @@ from datetime import timedelta
 st.set_page_config(page_title="AI Cash-Flow COO", layout="centered")
 
 # -----------------------------
-# Title
+# Header
 # -----------------------------
 st.title("🧠 Cash-Flow Early Warning System for SMEs")
 st.write(
     "Know when your business may face cash trouble — and **what to do next**.\n\n"
     "**No dashboards. No jargon. Just decisions.**"
+)
+
+st.divider()
+
+# -----------------------------
+# What this tool does (RESTORED)
+# -----------------------------
+st.subheader("What this tool does")
+st.markdown(
+    """
+This system:
+
+- Analyzes your real transaction data  
+- Forecasts cash position and runway  
+- Flags overspending and concentration risks  
+- Tells you **what to cut first** when cash is tight  
+
+*(No dashboards. No jargon. Just decisions.)*
+"""
+)
+
+st.divider()
+
+# -----------------------------
+# Sample CSV download (REAL FILE)
+# -----------------------------
+sample_csv = io.StringIO()
+sample_csv.write(
+    "date,amount,type,description\n"
+    "2025-01-01,42000,Inflow,Sales\n"
+    "2025-01-02,-15000,Outflow,Facebook Ads\n"
+    "2025-01-03,-8000,Outflow,Salary\n"
+    "2025-01-04,-5000,Outflow,Rent\n"
+)
+sample_csv.seek(0)
+
+st.download_button(
+    "📥 Download sample transactions CSV",
+    sample_csv,
+    file_name="sample_transactions.csv",
+    mime="text/csv"
 )
 
 st.divider()
@@ -31,7 +73,7 @@ if not uploaded_file:
     st.stop()
 
 # -----------------------------
-# Load data
+# Load & validate data
 # -----------------------------
 df = pd.read_csv(uploaded_file)
 
@@ -42,7 +84,6 @@ if not required_cols.issubset(df.columns):
 
 df["date"] = pd.to_datetime(df["date"])
 df["amount"] = df["amount"].astype(float)
-df["type"] = df["type"].str.lower()
 
 # -----------------------------
 # Core metrics
@@ -61,6 +102,7 @@ daily_burn = (
 )
 
 runway_days = int(cash_today / daily_burn) if daily_burn > 0 else 999
+cash_out_date = df["date"].max() + timedelta(days=runway_days)
 
 # -----------------------------
 # Advertising spend
@@ -68,95 +110,33 @@ runway_days = int(cash_today / daily_burn) if daily_burn > 0 else 999
 ads_mask = df["description"].str.contains(
     "ad|facebook|google|instagram", case=False, na=False
 )
-
 ad_spend = abs(df[ads_mask & (df["amount"] < 0)]["amount"].sum())
 ad_ratio = (ad_spend / inflows * 100) if inflows > 0 else 0
 
 # -----------------------------
-# Cash-out date
-# -----------------------------
-cash_out_date = (
-    df["date"].max() + timedelta(days=runway_days)
-    if daily_burn > 0 else None
-)
-
-# -----------------------------
-# AI COO SUMMARY (DETAILED)
+# AI COO SUMMARY (DETAILED & REAL)
 # -----------------------------
 st.subheader("📊 AI COO Summary")
 
 st.markdown(
     f"""
-**Current cash balance:** ₹{cash_today:,.0f}  
+**Cash today:** ₹{cash_today:,.0f}  
 
-Your business is currently spending **₹{daily_burn:,.0f} per day on average**, 
-which gives you a **cash runway of approximately {runway_days} days**.
+Your business is burning approximately **₹{daily_burn:,.0f} per day**,  
+giving you a **cash runway of ~{runway_days} days**.
 
-**Advertising efficiency:**  
-You are spending **{ad_ratio:.1f}% of your revenue on advertising**.
+If nothing changes, **cash may run out around:**  
+🧨 **{cash_out_date.date()}**
+
+**Advertising intensity:**  
+Ads consume **{ad_ratio:.1f}% of your revenue**.
 """
 )
 
 if ad_ratio > 25:
     st.warning(
-        "Advertising is consuming a significant share of revenue. "
-        "If growth does not justify this spend, margins will compress quickly."
-    )
-elif ad_ratio < 10:
-    st.info(
-        "Advertising spend is conservative. Growth may be constrained "
-        "if customer acquisition relies heavily on paid channels."
-    )
-
-if cash_out_date:
-    st.markdown(
-        f"🧨 **If nothing changes, cash may run out around:** **{cash_out_date.date()}**"
-    )
-
-st.divider()
-
-# -----------------------------
-# Key risks
-# -----------------------------
-st.subheader("⚠️ Key risks")
-
-risks = []
-
-if runway_days < 90:
-    risks.append("Cash runway is under 3 months — margin for error is low.")
-if ad_ratio > 30:
-    risks.append("High dependence on advertising for revenue generation.")
-
-if not risks:
-    st.success("No immediate financial red flags detected.")
-else:
-    for r in risks:
-        st.warning(r)
-
-st.divider()
-
-# -----------------------------
-# What should I cut first
-# -----------------------------
-st.subheader("✂️ What should you cut first?")
-
-expense_df = df[df["amount"] < 0].copy()
-expense_df["abs_amount"] = expense_df["amount"].abs()
-
-expense_rank = (
-    expense_df.groupby("description")["abs_amount"]
-    .sum()
-    .sort_values(ascending=False)
-)
-
-if ad_ratio > 20:
-    st.write(
-        "• **Advertising spend** is the fastest lever to pull for immediate cash relief."
-    )
-
-if not expense_rank.empty:
-    st.write(
-        f"• **{expense_rank.index[0]}** is your single largest expense category."
+        "Growth is heavily dependent on advertising. "
+        "If returns weaken, cash pressure will escalate quickly."
     )
 
 st.divider()
@@ -165,6 +145,9 @@ st.divider()
 # Expense category breakdown (FIXED PIE)
 # -----------------------------
 st.subheader("📉 Expense category breakdown")
+
+expense_df = df[df["amount"] < 0].copy()
+expense_df["abs_amount"] = expense_df["amount"].abs()
 
 expense_df["category"] = expense_df["description"].apply(
     lambda x: "Advertising"
@@ -178,28 +161,29 @@ expense_breakdown = (
     .sort_values(ascending=False)
 )
 
-top = expense_breakdown.head(5)
-other = expense_breakdown.iloc[5:].sum()
-
+# Group small items into "Other"
+top = expense_breakdown.head(4)
+other = expense_breakdown.iloc[4:].sum()
 if other > 0:
     top["Other"] = other
 
-fig, ax = plt.subplots(figsize=(4.5, 4.5))
-
-wedges, texts, autotexts = ax.pie(
+# ----- CLEAN PIE (NO OVERLAP) -----
+fig, ax = plt.subplots(figsize=(4, 4))
+wedges, _ , _ = ax.pie(
     top.values,
-    autopct="%1.1f%%",
+    autopct="%1.0f%%",
     startangle=90,
     pctdistance=0.7,
-    textprops={"fontsize": 9}
+    textprops={"fontsize": 9},
+    labels=None
 )
 
 ax.legend(
     wedges,
     top.index,
-    title="Expense category",
+    title="Category",
     loc="center left",
-    bbox_to_anchor=(1, 0.5),
+    bbox_to_anchor=(1.05, 0.5),
     fontsize=9
 )
 
@@ -207,30 +191,28 @@ ax.axis("equal")
 st.pyplot(fig)
 
 # -----------------------------
-# Cost concentration warning
+# Cost concentration risk
 # -----------------------------
 top_two_share = top.values[:2].sum() / top.values.sum() * 100
-
 if top_two_share > 65:
     st.warning(
-        f"⚠️ **Cost concentration risk:** Top 2 categories account for "
-        f"{top_two_share:.0f}% of total expenses."
+        f"⚠️ **Cost concentration risk:** "
+        f"Top 2 categories make up {top_two_share:.0f}% of total expenses."
     )
 
-st.divider()
+# -----------------------------
+# What should I cut first
+# -----------------------------
+st.subheader("✂️ What should you cut first?")
 
-# -----------------------------
-# Executive recommendation
-# -----------------------------
-st.subheader("✅ Executive recommendation")
+largest_cost = expense_breakdown.index[0]
 
 st.markdown(
-    """
-Maintain **tight control on discretionary costs**, especially advertising.
+    f"""
+1️⃣ **{largest_cost}** is your biggest cash drain  
+2️⃣ Advertising is the fastest lever for short-term relief  
+3️⃣ Avoid cutting fixed costs unless runway < 60 days  
 
-If revenue growth slows, **pause or optimize ad campaigns first**  
-before touching fixed costs like salary or rent.
-
-Reassess cash position **every 7 days**.
+👉 **Action:** Reduce variable spend first and reassess in 7 days.
 """
 )
