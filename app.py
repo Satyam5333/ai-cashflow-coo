@@ -46,7 +46,7 @@ st.markdown("""
 - **Analyzes** real transaction data to find your "True Burn"
 - **Categorizes** spending into Ads, Salary, and Rent heuristics
 - **Forecasts** cash position for the next 60 days
-- **Generates** Investor-ready reports
+- **Generates** Investor-ready reports with Audit Trails
 """)
 
 st.markdown("---")
@@ -117,7 +117,7 @@ if uploaded_file:
         else:
             st.success("✅ **Sustainable Growth Projected**")
 
-        # 3. SPEND ANALYSIS & CATEGORIES
+        # 3. SPEND ANALYSIS
         st.divider()
         st.subheader("📊 Spend Analysis")
         def categorize(desc):
@@ -156,7 +156,7 @@ if uploaded_file:
         )
         st.plotly_chart(px.line(f_df, x="date", y="closing_cash", title="Liquidity Position"), use_container_width=True)
 
-        # NEW: 🚀 INVESTOR PDF GENERATOR
+        # NEW: 🚀 IMPROVED INVESTOR PDF GENERATOR
         st.divider()
         st.subheader("📄 Investor-ready cash narrative")
         
@@ -165,36 +165,41 @@ if uploaded_file:
             with PdfPages(buffer) as pdf:
                 fig = plt.figure(figsize=(8.5, 11))
                 plt.axis("off")
+                
+                # Report Header & KPIs
                 content = f"""
 CASH-FLOW STRATEGIC SUMMARY
 Generated: {datetime.now().strftime('%Y-%m-%d')}
 
-EXECUTIVE METRICS:
-- Current Cash: ₹{cash_now:,.0f}
-- Estimated Runway: {metrics['runway_months']} Months
-- Projected Cash-out: {cash_out_str}
+1. EXECUTIVE LIQUIDITY OVERVIEW
+- Current Cash Reserves: ₹{cash_now:,.0f}
+- Sustainable Runway: {metrics['runway_months']} Months
+- Estimated Solvency Date: {cash_out_str}
 
-EFFICIENCY KPI:
-- Advertising Spend: {metrics['ad_spend_pct']*100:.1f}% of Sales
-- Product Return Rate: {metrics['return_rate']*100:.1f}%
+2. OPERATIONAL EFFICIENCY
+- Ad Intensity (Ad Spend/Sales): {metrics['ad_spend_pct']*100:.1f}%
+- Order Friction (Return Rate): {metrics['return_rate']*100:.1f}%
 
-TOP SPEND CATEGORIES:
+3. PROJECTED CASH MOVEMENT (60-DAY OUTLOOK)
+- Est. Monthly Inflow: ₹{metrics['avg_daily_sales'] * 30:,.0f}
+- Est. Monthly Outflow: ₹{(metrics['avg_daily_ad_spend'] + metrics['avg_daily_fixed_cost']) * 30:,.0f}
+- Est. Monthly Net Burn: ₹{metrics['monthly_burn']:,.0f}
+
+AUDIT TRAIL & CATEGORY BREAKDOWN:
 {cat_df.sort_values(by='amount', ascending=False).to_string(index=False)}
 
-60-DAY OUTLOOK:
-Based on current burn, liquidity remains the primary operating constraint.
-Strategy focuses on variable cost optimization and return reduction.
+Note: This forecast assumes current operating heuristics remain constant.
                 """
-                plt.text(0.1, 0.95, content, fontsize=12, family='monospace', va='top')
+                plt.text(0.1, 0.95, content, fontsize=11, family='monospace', va='top')
                 pdf.savefig(fig)
                 plt.close(fig)
             buffer.seek(0)
             return buffer
 
         st.download_button(
-            "📥 Download Investor PDF Report",
+            "📥 Download Refined Investor PDF",
             data=generate_investor_pdf(),
-            file_name=f"CashFlow_Report_{datetime.now().strftime('%Y%m%d')}.pdf",
+            file_name=f"COO_Cash_Report_{datetime.now().strftime('%Y%m%d')}.pdf",
             mime="application/pdf",
         )
 
