@@ -1,44 +1,58 @@
 import pandas as pd
 
-def calculate_daily_cashflow(
-    df: pd.DataFrame,
-    opening_cash: float
-) -> pd.DataFrame:
+
+def calculate_cash_metrics(df: pd.DataFrame) -> dict:
     """
-    Replicates Excel Daily_Cash_Balance logic
+    Calculates core cash-flow metrics from transaction data.
+    Expected columns:
+    - date
+    - amount
+    - type (income / expense / ad_spend / return)  [optional]
     """
 
-    # Group transactions by date
-    daily_flow = (
-        df.groupby("date")["amount"]
-        .sum()
-        .reset_index()
-        .rename(columns={"amount": "net_flow"})
-    )
+    df = df.copy()
+
+    # Ensure date
+    df["date"] = pd.to_datetime(df["date"])
 
     # Sort by date
-    daily_flow = daily_flow.sort_values("date").reset_index(drop=True)
+    df = df.sort_values("date")
 
-    # Calculate opening & closing cash
-    opening_cash_list = []
-    closing_cash_list = []
+    # Cash today
+    cash_today = df["amount"].sum()
 
-    current_cash = opening_cash
+    # Last 30 days
+    last_30 = df[df["date"] >= df["date"].max() - pd.Timedelta(days=30)]
 
-    for net in daily_flow["net_flow"]:
-        opening_cash_list.append(current_cash)
-        closing = current_cash + net
-        closing_cash_list.append(closing)
-        current_cash = closing
+    avg_daily_burn = (
+        last_30[last_30["amount"] < 0]["amount"].sum() / 30
+        if not last_30.empty
+        else 0
+    )
 
-    daily_flow["opening_cash"] = opening_cash_list
-    daily_flow["closing_cash"] = closing_cash_list
+    # Ad spend
+    if "type" in df.columns:
+        ad_spend = df[df["type"] == "ad_spend"]["amount"].abs().sum()
+        sales = df[df["type"] == "income"]["amount"].sum()
+        returns = df[df["type"] == "return"]["amount"].abs().sum()
+    else:
+        ad_spend = 0
+        sales = df[df["amount"] > 0]["amount"].sum()
+        returns = 0
 
-    return daily_flow
+    ad_spend_pct = ad_spend / sales if sales > 0 else 0
+    return_rate = returns / sales if sales > 0 else 0
 
+    runway_days = (
+        "Cash Positive"
+        if avg_daily_burn >= 0
+        else round(abs(cash_today / avg_daily_burn))
+    )
 
-def get_latest_cash(daily_cashflow: pd.DataFrame) -> float:
-    """
-    Returns last closing cash (Cash Today)
-    """
-    return float(daily_cashflow["closing_cash"].iloc[-1])
+    return {
+        "cash_today": cash_today,
+        "avg_daily_burn": avg_daily_burn,
+        "runway_days": runway_days,
+        "ad_spend_pct": ad_spend_pct,
+        "return_rate": return_rate,
+    }
