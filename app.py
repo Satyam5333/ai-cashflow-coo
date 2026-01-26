@@ -15,7 +15,7 @@ st.markdown("""
 
 /* Overall page background */
 html, body {
-    background-color: #f7f9fc;
+    background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 40%, #ffffff 100%);
 }
 
 /* Improve content spacing */
