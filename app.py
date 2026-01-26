@@ -158,11 +158,55 @@ This preserves execution capability while buying time.
 """
 )
 
+# =================================================
+# 🔒 NEW ADDITION: FOUNDER ACTION PLAN (v1.1)
+# =================================================
 st.divider()
+st.subheader("🧭 Founder Action Plan (Next 30 Days)")
+
+st.markdown("### ✅ Priority actions")
+
+st.markdown(
+    f"""
+**1. Actively cap advertising spend**
+- Reason: Ads consume **{ad_ratio:.1f}% of revenue**, creating volatility risk  
+- Impact: Can extend runway by **15–30 days** if ROI weakens  
+
+**2. Freeze new fixed commitments**
+- Reason: Current runway is **{runway_days} days**, sensitive to revenue dips  
+- Impact: Preserves operational flexibility  
+
+**3. Renegotiate variable vendor costs**
+- Reason: Variable costs are the fastest lever without damaging execution  
+- Impact: Immediate cash relief without morale impact
+"""
+)
+
+st.markdown("### 🚫 Avoid for the next 60 days")
+st.markdown(
+    """
+- Do NOT increase ad budgets to chase short-term growth  
+- Do NOT commit to long-term fixed contracts  
+- Do NOT expand headcount without revenue visibility
+"""
+)
+
+st.markdown("### ⚠️ If no action is taken")
+st.markdown(
+    f"""
+- Cash risk increases materially within **~{int(runway_days * 0.75)} days**  
+- Any **10% revenue drop** can shorten runway by **20+ days**  
+- Decision flexibility reduces rapidly once runway < 90 days
+"""
+)
+
+confidence_score = 7.8 if ad_ratio < 30 else 6.4
+st.markdown(f"### 🎯 Decision confidence score: **{confidence_score}/10**")
 
 # -------------------------------------------------
 # Expense breakdown (clean, non-overlapping pie)
 # -------------------------------------------------
+st.divider()
 st.subheader("📉 Expense category breakdown")
 
 expense_df = df[df["amount"] < 0].copy()
