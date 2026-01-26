@@ -1,7 +1,10 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 from datetime import datetime, timedelta
+from io import BytesIO
 
 # IMPORT YOUR ENGINES
 from engine.loader import load_transactions
@@ -43,6 +46,7 @@ st.markdown("""
 - **Analyzes** real transaction data to find your "True Burn"
 - **Categorizes** spending into Ads, Salary, and Rent heuristics
 - **Forecasts** cash position for the next 60 days
+- **Generates** Investor-ready reports
 """)
 
 st.markdown("---")
@@ -61,7 +65,6 @@ sample_data = """date,amount,description
 2026-01-20,-35000,Meta Ads - Retargeting
 2026-01-25,-4000,Google Workspace Tool
 """
-
 st.download_button("📥 Download Sample D2C Transactions CSV", data=sample_data, file_name="sample_d2c_transactions.csv", mime="text/csv")
 
 st.markdown("---")
@@ -81,10 +84,8 @@ uploaded_file = st.file_uploader("Upload Transactions", type=["csv", "pdf"])
 
 if uploaded_file:
     try:
-        # 1. LOAD DATA
         df = load_transactions(uploaded_file)
         
-        # Smart Sign Correction
         def reconcile_signs(row):
             desc = str(row['description']).lower()
             val = abs(row['amount'])
@@ -96,27 +97,27 @@ if uploaded_file:
         
         df['amount'] = df.apply(reconcile_signs, axis=1)
 
-        # 2. RUN METRICS
         metrics = calculate_business_metrics(df)
         cash_now = opening_balance + df["amount"].sum()
 
-        # 3. KPI CARDS
+        # 1. KPI CARDS
         c1, c2, c3, c4 = st.columns(4)
         with c1: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Cash Today</div><div class='kpi-value'>₹{cash_now:,.0f}</div></div>", unsafe_allow_html=True)
         with c2: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Runway</div><div class='kpi-value'>{metrics['runway_months']} Mo</div></div>", unsafe_allow_html=True)
         with c3: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Ad Spend %</div><div class='kpi-value'>{metrics['ad_spend_pct']*100:.1f}%</div></div>", unsafe_allow_html=True)
         with c4: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Returns</div><div class='kpi-value'>{metrics['return_rate']*100:.1f}%</div></div>", unsafe_allow_html=True)
 
-        # NEW: 🚀 CASH-OUT DATE PREDICTION
+        # 2. CASH-OUT PREDICTION
         st.divider()
+        cash_out_str = "Sustainable"
         if metrics['runway_months'] < 99:
-            cash_out_date = (datetime.now() + timedelta(days=int(metrics['runway_months'] * 30))).strftime('%d %b %Y')
-            st.error(f"⚠️ **Estimated Cash-out Date: {cash_out_date}**")
-            st.write("This is the date your bank balance is projected to hit zero based on current burn.")
+            cash_out_date = (datetime.now() + timedelta(days=int(metrics['runway_months'] * 30)))
+            cash_out_str = cash_out_date.strftime('%d %b %Y')
+            st.error(f"⚠️ **Estimated Cash-out Date: {cash_out_str}**")
         else:
-            st.success("✅ **Sustainable Growth:** No cash-out date projected based on current inflows.")
+            st.success("✅ **Sustainable Growth Projected**")
 
-        # 4. EXPENSE BREAKDOWN
+        # 3. SPEND ANALYSIS & CATEGORIES
         st.divider()
         st.subheader("📊 Spend Analysis")
         def categorize(desc):
@@ -125,10 +126,8 @@ if uploaded_file:
             if any(x in d for x in ["salary", "wage"]): return "Salary"
             if any(x in d for x in ["rent", "office"]): return "Rent"
             return "Other"
-
-        expenses = df[df["amount"] < 0].copy()
-        expenses["Category"] = expenses["description"].apply(categorize)
-        cat_df = expenses.groupby("Category")["amount"].sum().abs().reset_index()
+        df["Category"] = df["description"].apply(categorize)
+        cat_df = df[df["amount"] < 0].groupby("Category")["amount"].sum().abs().reset_index()
         
         col_pie, col_table = st.columns([2, 1])
         with col_pie:
@@ -136,48 +135,76 @@ if uploaded_file:
         with col_table:
             st.table(cat_df.sort_values(by="amount", ascending=False))
 
-        # NEW: ✅ “WHAT SHOULD I CUT FIRST?” DECISION BLOCK
+        # 4. DECISION BLOCK
         st.divider()
         st.subheader("🎯 What should I cut first?")
         st.markdown("""
         <div class='decision-block'>
-            <strong>Priority 1: Underperforming Ad Sets</strong><br>
-            Check Meta/Google ROAS. Any campaign with ROAS < 1.5 is burning cash without return.<br><br>
-            <strong>Priority 2: Subscription Leaks</strong><br>
-            Review 'Other' expenses for SaaS tools you haven't used in 30 days.<br><br>
-            <strong>Priority 3: Return Management</strong><br>
-            If Returns > 15%, investigate shipping or quality issues before spending more on ads.
+            <strong>Priority 1: Underperforming Ad Sets</strong> (ROAS < 1.5)<br>
+            <strong>Priority 2: Unused SaaS/Subscriptions</strong><br>
+            <strong>Priority 3: Return/RTO Reduction</strong>
         </div>
         """, unsafe_allow_html=True)
 
-        # 5. 60-DAY FORECAST
+        # 5. FORECAST
         st.divider()
         st.subheader(f"📉 {forecast_horizon}-Day Cash Forecast")
         f_df = forecast_cashflow(
             cash_today=cash_now, start_date=df["date"].max(), days=forecast_horizon,
-            avg_daily_sales=metrics["avg_daily_sales"], 
-            avg_daily_ad_spend=metrics["avg_daily_ad_spend"], 
-            avg_daily_fixed_cost=metrics["avg_daily_fixed_cost"], 
-            cod_delay_days=cod_delay, return_rate=metrics["return_rate"]
+            avg_daily_sales=metrics["avg_daily_sales"], avg_daily_ad_spend=metrics["avg_daily_ad_spend"], 
+            avg_daily_fixed_cost=metrics["avg_daily_fixed_cost"], cod_delay_days=cod_delay, return_rate=metrics["return_rate"]
         )
+        st.plotly_chart(px.line(f_df, x="date", y="closing_cash", title="Liquidity Position"), use_container_width=True)
+
+        # NEW: 🚀 INVESTOR PDF GENERATOR
+        st.divider()
+        st.subheader("📄 Investor-ready cash narrative")
         
-        fig = px.line(f_df, x="date", y="closing_cash", title="Liquidity Position")
-        fig.add_hline(y=0, line_dash="dash", line_color="red", annotation_text="Insolvency Point")
-        st.plotly_chart(fig, use_container_width=True)
+        def generate_investor_pdf():
+            buffer = BytesIO()
+            with PdfPages(buffer) as pdf:
+                fig = plt.figure(figsize=(8.5, 11))
+                plt.axis("off")
+                content = f"""
+CASH-FLOW STRATEGIC SUMMARY
+Generated: {datetime.now().strftime('%Y-%m-%d')}
+
+EXECUTIVE METRICS:
+- Current Cash: ₹{cash_now:,.0f}
+- Estimated Runway: {metrics['runway_months']} Months
+- Projected Cash-out: {cash_out_str}
+
+EFFICIENCY KPI:
+- Advertising Spend: {metrics['ad_spend_pct']*100:.1f}% of Sales
+- Product Return Rate: {metrics['return_rate']*100:.1f}%
+
+TOP SPEND CATEGORIES:
+{cat_df.sort_values(by='amount', ascending=False).to_string(index=False)}
+
+60-DAY OUTLOOK:
+Based on current burn, liquidity remains the primary operating constraint.
+Strategy focuses on variable cost optimization and return reduction.
+                """
+                plt.text(0.1, 0.95, content, fontsize=12, family='monospace', va='top')
+                pdf.savefig(fig)
+                plt.close(fig)
+            buffer.seek(0)
+            return buffer
+
+        st.download_button(
+            "📥 Download Investor PDF Report",
+            data=generate_investor_pdf(),
+            file_name=f"CashFlow_Report_{datetime.now().strftime('%Y%m%d')}.pdf",
+            mime="application/pdf",
+        )
 
         # 6. AI ADVICE
         st.divider()
         st.subheader("🤖 Executive Strategy Report")
-        advice_text = generate_coo_advice(
-            cash_today=cash_now, 
-            runway_days=metrics["runway_months"], 
-            ad_spend_pct=metrics["ad_spend_pct"], 
-            return_rate=metrics["return_rate"], 
-            decisions=generate_decisions(metrics)
-        )
+        advice_text = generate_coo_advice(cash_now, metrics['runway_months'], metrics['ad_spend_pct'], metrics['return_rate'], generate_decisions(metrics))
         st.info(advice_text)
         
     except Exception as e:
         st.error(f"Analysis Error: {e}")
 else:
-    st.info("👋 Welcome! Please upload your Shopify or Bank statement CSV to begin.")
+    st.info("👋 Upload data to begin.")
