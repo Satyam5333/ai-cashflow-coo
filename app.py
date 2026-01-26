@@ -29,6 +29,9 @@ st.markdown("""
     .risk-box {
         padding: 1rem; border-radius: 10px; background-color: #fff5f5; border: 1px solid #feb2b2; color: #c53030;
     }
+    .decision-block {
+        padding: 1.2rem; border-radius: 12px; background-color: #f0fdf4; border: 1px solid #bbf7d0; color: #166534;
+    }
     .paid-plan {
         background-color: #f8fafc; padding: 2rem; border-radius: 15px; 
         border: 2px solid #e2e8f0; border-left: 10px solid #1e293b;
@@ -46,7 +49,7 @@ st.subheader("Know when your business may face cash trouble — and what to do n
 
 st.markdown("""
 ### What this tool does
-- **Analyzes** Bank, Tally, or Shopify data to find "True Burn"
+- **Analyzes** Bank, Tally, or Accounting data (Debit/Credit logic)
 - **Categorizes** spending into Ads, Salary, and Rent heuristics
 - **Forecasts** cash position for the next 60 days
 - **Generates** Investor-ready reports & Strategic Action Plans
@@ -61,7 +64,7 @@ sample_data = """Date,Debit,Credit,Activity
 30/12/2025,12000,,Office Rent
 28/12/2025,25000,,Salary
 """
-st.download_button("📥 Download Sample D2C Transactions CSV", data=sample_data, file_name="sample_d2c_transactions.csv", mime="text/csv")
+st.download_button("📥 Download Compatible Sample CSV", data=sample_data, file_name="sample_d2c_transactions.csv", mime="text/csv")
 st.markdown("---")
 
 # =================================================
@@ -79,23 +82,19 @@ uploaded_file = st.file_uploader("Upload Data (CSV, Excel, or PDF)", type=["csv"
 
 if uploaded_file:
     try:
-        # 1. LOAD DATA & HANDLE TALLY/BANK MAPPING (FIXES 'DATE' ERROR)
+        # 1. LOAD DATA & SMART ADAPTER (FIXES 'DATE' ERROR)
         df = load_transactions(uploaded_file)
+        
+        # Ensure lowercase for internal logic consistency
         df.columns = [c.lower().strip() for c in df.columns]
 
-        # Handle Debit/Credit logic found in bank statements
+        # Debit/Credit handling for Bank Statements
         if 'debit' in df.columns and 'credit' in df.columns:
             df['amount'] = df['credit'].fillna(0) - df['debit'].fillna(0)
         
-        # Smart Sign Correction Layer (Heuristic based)
-        def reconcile_signs(row):
-            desc = str(row['description']).lower()
-            val = abs(row['amount'])
-            if any(k in desc for k in ["ad", "facebook", "meta", "google", "rent", "salary", "refund"]): return -val
-            if any(k in desc for k in ["payout", "sale", "deposit", "credit"]): return val
-            return row['amount']
-        
-        df['amount'] = df.apply(reconcile_signs, axis=1)
+        # Mapping "Activity" column if present
+        if 'activity' in df.columns:
+            df = df.rename(columns={'activity': 'description'})
 
         # 2. RUN METRICS
         metrics = calculate_business_metrics(df)
@@ -118,7 +117,7 @@ if uploaded_file:
         else:
             st.success("✅ **Sustainable Growth Projected**")
 
-        # 5. SPEND ANALYSIS (PRESERVED)
+        # 5. SPEND ANALYSIS & COST CONCENTRATION (PRESERVED)
         st.divider()
         st.subheader("📊 Spend Analysis")
         def categorize(desc):
@@ -129,16 +128,21 @@ if uploaded_file:
             return "Other"
         df["Category"] = df["description"].apply(categorize)
         cat_df = df[df["amount"] < 0].groupby("Category")["amount"].sum().abs().reset_index()
-        st.plotly_chart(px.pie(cat_df, values='amount', names='Category', hole=0.4), use_container_width=True)
+        
+        col_pie, col_table = st.columns([2, 1])
+        with col_pie:
+            st.plotly_chart(px.pie(cat_df, values='amount', names='Category', hole=0.4), use_container_width=True)
+        with col_table:
+            st.table(cat_df.sort_values(by="amount", ascending=False))
 
-        # 6. COST DRIVER WARNINGS (PRESERVED)
+        # Risk Warning logic
         top_drivers = cat_df.sort_values(by="amount", ascending=False).head(2)
         total_exp = cat_df['amount'].sum()
         primary_pct = (top_drivers.iloc[0]['amount'] / total_exp) * 100 if total_exp > 0 else 0
         if primary_pct > 50:
             st.markdown(f"<div class='risk-box'><strong>Cost Concentration Risk:</strong> {top_drivers.iloc[0]['Category']} is {primary_pct:.1f}% of spend.</div>", unsafe_allow_html=True)
 
-        # 7. FORECAST CHART (PRESERVED)
+        # 6. FORECAST CHART (PRESERVED)
         st.divider()
         st.subheader(f"📉 {forecast_horizon}-Day Cash Forecast")
         f_df = forecast_cashflow(cash_today=cash_now, start_date=df["date"].max(), days=forecast_horizon,
@@ -146,7 +150,7 @@ if uploaded_file:
                                avg_daily_fixed_cost=metrics.get("avg_daily_fixed_cost", 0), cod_delay_days=cod_delay, return_rate=metrics.get("return_rate", 0))
         st.plotly_chart(px.line(f_df, x="date", y="closing_cash", title="Liquidity Position"), use_container_width=True)
 
-        # 8. PAID-FEEL ACTION PLAN (PRESERVED)
+        # 7. PAID-FEEL ACTION PLAN (PRESERVED)
         st.divider()
         st.subheader("📋 Executive Strategic Action Plan")
         st.markdown("<div class='paid-plan'>", unsafe_allow_html=True)
@@ -159,10 +163,10 @@ if uploaded_file:
         with col_pb:
             st.markdown("### Decision Confidence")
             st.markdown("<div class='confidence-score'>85%</div>", unsafe_allow_html=True)
-            st.markdown(f"<span class='warning-text'>Cash exhaustion by: {cash_out_str}</span>", unsafe_allow_html=True)
+            st.markdown(f"<span class='warning-text'>Target Survival: {cash_out_str}</span>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # 9. INVESTOR PDF GENERATOR (PRESERVED)
+        # 8. INVESTOR PDF GENERATOR (PRESERVED)
         st.divider()
         def generate_pdf():
             buf = BytesIO()
@@ -174,7 +178,7 @@ if uploaded_file:
             buf.seek(0); return buf
         st.download_button("📥 Download Investor PDF", data=generate_pdf(), file_name="COO_Report.pdf", mime="application/pdf")
 
-        # 10. STRATEGIC Q&A (PRESERVED)
+        # 9. STRATEGIC Q&A (PRESERVED)
         st.divider()
         st.subheader("🔍 Deep-Dive Analysis")
         q = st.text_input("Ask about your Tally/Bank data (e.g. 'total rent')")
@@ -187,11 +191,11 @@ if uploaded_file:
                 top = df.sort_values(by='amount').iloc[0]
                 st.write(f"🚩 **Top Expense:** {top['description']} (₹{abs(top['amount']):,.0f})")
 
-        # 11. AI ADVICE (PRESERVED)
+        # 10. AI ADVICE (PRESERVED)
         st.divider()
         st.info(generate_coo_advice(cash_now, metrics['runway_months'], metrics.get('ad_spend_pct', 0), metrics.get('return_rate', 0), generate_decisions(metrics)))
 
     except Exception as e:
-        st.error(f"Analysis Error: {e}. Check if column names match 'Date', 'Debit', 'Credit'.")
+        st.error(f"Analysis Error: {e}. Ensure column names match 'Date', 'Debit', 'Credit'.")
 else:
     st.info("👋 Upload your Shopify/Bank CSV to begin.")
