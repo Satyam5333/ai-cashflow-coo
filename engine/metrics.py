@@ -1,62 +1,34 @@
 import pandas as pd
 
-def calculate_business_metrics(df: pd.DataFrame) -> dict:
-    """
-    Derives business metrics automatically from transaction data
-    """
+def calculate_business_metrics(df: pd.DataFrame):
+    """Calculates KPIs for the COO dashboard."""
+    # 1. Basic Totals
+    total_inflow = df[df["amount"] > 0]["amount"].sum()
+    total_outflow = df[df["amount"] < 0]["amount"].abs().sum()
+    current_cash = df["amount"].sum()
 
-    # Ensure correct types
-    df["date"] = pd.to_datetime(df["date"])
-    df["amount"] = df["amount"].astype(float)
+    # 2. Marketing & Returns (using your description logic)
+    ads_mask = df["description"].str.contains("ad|facebook|google|instagram|meta", case=False, na=False)
+    ad_spend = df.loc[ads_mask & (df["amount"] < 0), "amount"].abs().sum()
+    
+    returns_mask = df["description"].str.contains("refund|return", case=False, na=False)
+    returns = df.loc[returns_mask & (df["amount"] < 0), "amount"].abs().sum()
 
-    # Separate inflows and outflows
-    inflows = df[df["amount"] > 0].copy()
-    outflows = df[df["amount"] < 0].copy()
-
-    # --- Avg Daily Sales ---
-    daily_sales = (
-        inflows.groupby("date")["amount"]
-        .sum()
-    )
-    avg_daily_sales = daily_sales.mean() if not daily_sales.empty else 0
-
-    # --- Ad Spend ---
-    ad_spend = outflows[
-        outflows["description"].str.contains("ad", case=False, na=False)
-    ]
-    daily_ads = (
-        ad_spend.groupby("date")["amount"]
-        .sum()
-        .abs()
-    )
-    avg_daily_ad_spend = daily_ads.mean() if not daily_ads.empty else 0
-
-    # --- Fixed Costs (salary, rent, etc.) ---
-    fixed_costs = outflows[
-        outflows["description"].str.contains(
-            "salary|rent|office|fixed", case=False, na=False
-        )
-    ]
-    daily_fixed = (
-        fixed_costs.groupby("date")["amount"]
-        .sum()
-        .abs()
-    )
-    avg_daily_fixed_cost = daily_fixed.mean() if not daily_fixed.empty else 0
-
-    # --- Return Rate (heuristic) ---
-    returns = inflows[
-        inflows["description"].str.contains("return|refund", case=False, na=False)
-    ]
-    return_rate = (
-        abs(returns["amount"].sum()) / inflows["amount"].sum()
-        if inflows["amount"].sum() > 0
-        else 0
-    )
+    # 3. Daily Averages (for the forecast)
+    # We look at the last 30 days of data to get a realistic 'current' burn
+    last_date = df["date"].max()
+    thirty_days_ago = last_date - pd.Timedelta(days=30)
+    recent_df = df[df["date"] >= thirty_days_ago]
+    
+    daily_sales = recent_df[recent_df["amount"] > 0]["amount"].sum() / 30
+    daily_outflow = recent_df[recent_df["amount"] < 0]["amount"].abs().sum() / 30
+    daily_burn = daily_outflow - (daily_sales * 0.8) # Simple burn estimate
 
     return {
-        "avg_daily_sales": round(avg_daily_sales, 2),
-        "avg_daily_ad_spend": round(avg_daily_ad_spend, 2),
-        "avg_daily_fixed_cost": round(avg_daily_fixed_cost, 2),
-        "return_rate": round(return_rate, 2)
+        "cash_today": current_cash,
+        "daily_burn": daily_burn if daily_burn > 0 else 0,
+        "ad_spend_pct": (ad_spend / total_inflow) if total_inflow > 0 else 0,
+        "return_rate": (returns / total_inflow) if total_inflow > 0 else 0,
+        "avg_daily_sales": daily_sales,
+        "avg_daily_outflow": daily_outflow
     }
