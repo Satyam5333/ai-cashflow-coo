@@ -3,183 +3,191 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from io import StringIO
 
-# ---------------- Page config ----------------
-st.set_page_config(
-    page_title="Cash-Flow Early Warning System",
-    layout="centered"
-)
+st.set_page_config(page_title="AI Cash-Flow COO", layout="centered")
 
-# ---------------- Title ----------------
+# --------------------------------------------------
+# Header
+# --------------------------------------------------
 st.title("🧠 Cash-Flow Early Warning System for SMEs")
 st.write(
-    "Know when your business may face cash trouble — and **what to do next**."
+    "Know when your business may face cash trouble — **and what to do next**."
 )
 
-st.markdown("---")
+st.divider()
 
-# ---------------- What this tool does ----------------
+# --------------------------------------------------
+# What this tool does
+# --------------------------------------------------
 st.subheader("What this tool does")
-st.markdown("""
+st.markdown(
+    """
 - Analyzes real transaction data  
-- Identifies cash burn and runway  
-- Highlights cost concentration risks  
-- Gives **clear, COO-level recommendations**  
+- Tracks cash inflows vs outflows  
+- Highlights spending concentration risks  
+- Shows where cash is actually going  
+- Gives **clear, CFO-style insights** (no dashboards, no jargon)
+"""
+)
 
-*(No dashboards. No jargon. Just decisions.)*
-""")
+st.divider()
 
-st.markdown("---")
-
-# ---------------- Sample CSV download ----------------
-st.subheader("Need a sample CSV format?")
-
+# --------------------------------------------------
+# Sample CSV download
+# --------------------------------------------------
 sample_csv = """date,amount,type,description
 2025-01-01,42000,Inflow,Sales
-2025-01-02,-15000,Outflow,Advertising
+2025-01-02,-15000,Outflow,Facebook Ads
 2025-01-03,-8000,Outflow,Salary
-2025-01-04,-4000,Outflow,Rent
-2025-01-05,-2500,Outflow,Packaging
+2025-01-04,-12000,Outflow,Google Ads
+2025-01-05,-6000,Outflow,Instagram Ads
+2025-01-06,-4000,Outflow,Packaging
+2025-01-07,-2500,Outflow,Delivery
 """
 
 st.download_button(
-    label="📥 Download sample transactions CSV",
+    "⬇️ Download sample CSV format",
     data=sample_csv,
     file_name="sample_transactions.csv",
-    mime="text/csv"
+    mime="text/csv",
 )
 
-st.markdown("---")
+st.divider()
 
-# ---------------- File upload ----------------
-st.subheader("Upload your transactions CSV")
-uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
+# --------------------------------------------------
+# Upload CSV
+# --------------------------------------------------
+uploaded_file = st.file_uploader(
+    "Upload your transactions CSV (bank / accounting / POS export)",
+    type=["csv"],
+)
 
 if uploaded_file:
-    try:
-        df = pd.read_csv(uploaded_file)
+    df = pd.read_csv(uploaded_file)
 
-        required_cols = {"date", "amount", "type", "description"}
-        if not required_cols.issubset(df.columns):
-            st.error("CSV must contain: date, amount, type, description")
-            st.stop()
+    required_cols = {"date", "amount", "type", "description"}
+    if not required_cols.issubset(df.columns):
+        st.error("CSV must contain: date, amount, type, description")
+        st.stop()
 
-        # Clean data
-        df["date"] = pd.to_datetime(df["date"])
-        df["amount"] = pd.to_numeric(df["amount"])
+    df["date"] = pd.to_datetime(df["date"])
+    df["amount"] = df["amount"].astype(float)
 
-        inflow = df[df["amount"] > 0]["amount"].sum()
-        outflow = abs(df[df["amount"] < 0]["amount"].sum())
-        cash_today = inflow - outflow
+    inflow = df[df["amount"] > 0]["amount"].sum()
+    outflow = df[df["amount"] < 0]["amount"].sum() * -1
+    cash_today = inflow - outflow
 
-        avg_daily_burn = outflow / max(df["date"].nunique(), 1)
-        runway_days = int(cash_today / avg_daily_burn) if avg_daily_burn > 0 else 0
+    # --------------------------------------------------
+    # AI COO Summary
+    # --------------------------------------------------
+    st.divider()
+    st.subheader("📊 AI COO Summary")
 
-        # ---------------- Expense categorisation ----------------
-        expense_df = df[df["amount"] < 0].copy()
-        expense_df["cost"] = abs(expense_df["amount"])
+    avg_daily_burn = outflow / max(df["date"].nunique(), 1)
+    runway_days = int(cash_today / avg_daily_burn) if avg_daily_burn > 0 else 0
 
-        def normalize_category(text):
-            t = text.lower()
-            if "ad" in t or "marketing" in t:
-                return "Advertising"
-            if "salary" in t or "payroll" in t:
-                return "Salary"
-            if "rent" in t:
-                return "Rent"
-            if "delivery" in t:
-                return "Delivery"
-            if "pack" in t:
-                return "Packaging"
-            if "refund" in t:
-                return "Refund"
-            return "Other"
+    ad_spend = df[
+        (df["amount"] < 0)
+        & (df["description"].str.contains("ads", case=False))
+    ]["amount"].sum() * -1
 
-        expense_df["category"] = expense_df["description"].apply(normalize_category)
+    ad_ratio = (ad_spend / inflow) * 100 if inflow > 0 else 0
 
-        expense_breakdown = (
-            expense_df.groupby("category")["cost"]
-            .sum()
-            .sort_values(ascending=False)
+    st.markdown(
+        f"""
+**Current cash position:** ₹{cash_today:,.0f}  
+**Estimated runway:** {runway_days} days  
+**Advertising intensity:** {ad_ratio:.1f}% of total sales  
+
+**Insight:**  
+Your business is currently cash-positive.  
+Marketing is a major growth lever — but also a key risk if returns weaken.
+"""
+    )
+
+    # --------------------------------------------------
+    # Expense category breakdown
+    # --------------------------------------------------
+    st.divider()
+    st.subheader("📉 Expense category breakdown")
+
+    expenses = (
+        df[df["amount"] < 0]
+        .groupby("description")["amount"]
+        .sum()
+        .abs()
+        .to_dict()
+    )
+
+    total_expense = sum(expenses.values())
+
+    major = {}
+    other_total = 0
+
+    for k, v in expenses.items():
+        if v / total_expense >= 0.05:
+            major[k] = v
+        else:
+            other_total += v
+
+    if other_total > 0:
+        major["Other costs"] = other_total
+
+    # Pie chart (clean & small)
+    fig, ax = plt.subplots(figsize=(4, 4), dpi=110)
+    ax.pie(
+        major.values(),
+        labels=major.keys(),
+        autopct="%1.0f%%",
+        startangle=90,
+        pctdistance=0.7,
+        labeldistance=1.15,
+        wedgeprops={"edgecolor": "white"},
+        textprops={"fontsize": 9},
+    )
+    ax.set_title("Expense share", fontsize=11)
+    st.pyplot(fig)
+
+    # --------------------------------------------------
+    # Cost concentration risk
+    # --------------------------------------------------
+    sorted_exp = sorted(major.items(), key=lambda x: x[1], reverse=True)
+    top_cat, top_amt = sorted_exp[0]
+    top_share = top_amt / total_expense
+
+    if top_share >= 0.5:
+        st.warning(
+            f"⚠️ **Cost concentration risk:** {top_cat} alone accounts for "
+            f"{top_share:.0%} of total expenses. Any inefficiency here can "
+            "rapidly damage cash flow."
+        )
+    elif top_share >= 0.35:
+        st.info(
+            f"ℹ️ **Moderate concentration:** {top_cat} is {top_share:.0%} "
+            "of spending. Monitor ROI closely."
+        )
+    else:
+        st.success("✅ Expenses are well diversified. No major concentration risk.")
+
+    # --------------------------------------------------
+    # Recommended actions
+    # --------------------------------------------------
+    st.divider()
+    st.subheader("✅ Recommended actions")
+
+    actions = []
+
+    if ad_ratio > 20:
+        actions.append(
+            "Audit advertising ROI weekly — ad spend is high relative to sales."
         )
 
-        total_expense = expense_breakdown.sum()
-
-        advertising_spend = expense_breakdown.get("Advertising", 0)
-        ad_ratio = (advertising_spend / inflow * 100) if inflow > 0 else 0
-
-        # ---------------- AI COO Summary ----------------
-        st.markdown("---")
-        st.subheader("📊 AI COO Summary")
-
-        st.write(f"**Cash position:** ₹{cash_today:,.0f}")
-        st.write(f"**Cash runway:** ~{runway_days} days")
-
-        if ad_ratio > 30:
-            st.write(
-                f"⚠️ **Advertising consumes {ad_ratio:.1f}% of revenue**, "
-                "which is high and increases cash risk if sales slow."
-            )
-        elif ad_ratio > 15:
-            st.write(
-                f"🟡 Advertising is **{ad_ratio:.1f}% of revenue** — monitor ROI closely."
-            )
-        else:
-            st.write(
-                f"🟢 Advertising spend is controlled at **{ad_ratio:.1f}% of revenue**."
-            )
-
-        # ---------------- Cost concentration risk ----------------
-        st.markdown("---")
-        st.subheader("⚠️ Key risks")
-
-        top_category = expense_breakdown.index[0]
-        top_share = expense_breakdown.iloc[0] / total_expense * 100
-
-        if top_share > 50:
-            st.warning(
-                f"High cost concentration: **{top_category} accounts for "
-                f"{top_share:.1f}% of total expenses**."
-            )
-        else:
-            st.success("No major cost concentration risks detected.")
-
-        # ---------------- Recommendations ----------------
-        st.markdown("---")
-        st.subheader("✅ Recommended actions")
-
-        actions = []
-
-        if ad_ratio > 25:
-            actions.append("Reduce advertising or improve conversion efficiency")
-        if runway_days < 90:
-            actions.append("Extend runway by cutting fixed costs or increasing collections")
-        if "Salary" in expense_breakdown and expense_breakdown["Salary"] / total_expense > 0.3:
-            actions.append("Review team size and productivity metrics")
-
-        if not actions:
-            actions.append("Maintain current spending discipline")
-
-        for a in actions:
-            st.write(f"• {a}")
-
-        # ---------------- Expense pie chart ----------------
-        st.markdown("---")
-        st.subheader("📉 Expense category breakdown")
-
-        fig, ax = plt.subplots(figsize=(5, 5))
-
-        ax.pie(
-            expense_breakdown.values,
-            labels=expense_breakdown.index,
-            autopct="%1.1f%%",
-            startangle=90,
-            pctdistance=0.7,
-            labeldistance=1.1,
-            wedgeprops={"edgecolor": "white"}
+    if runway_days < 90:
+        actions.append(
+            "Reduce fixed costs or improve collections to extend runway."
         )
 
-        ax.axis("equal")
-        st.pyplot(fig)
+    if not actions:
+        actions.append("Maintain current spending discipline and cash controls.")
 
-    except Exception as e:
-        st.error(f"Error processing file: {e}")
+    for a in actions:
+        st.write("•", a)
