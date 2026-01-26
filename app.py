@@ -7,9 +7,9 @@ from io import BytesIO
 
 st.set_page_config(page_title="AI Cash-Flow COO", layout="centered")
 
-# -------------------------------------------------
+# =================================================
 # UI POLISH (GLOBAL, ADD-ONLY, SAFE)
-# -------------------------------------------------
+# =================================================
 st.markdown("""
 <style>
 
@@ -87,9 +87,9 @@ div[data-testid="stFileUploader"] {
 </style>
 """, unsafe_allow_html=True)
 
-# -------------------------------------------------
-# Header
-# -------------------------------------------------
+# =================================================
+# HEADER (UNCHANGED)
+# =================================================
 st.title("🧠 Cash-Flow Early Warning System for SMEs")
 st.write(
     "Know when your business may face cash trouble — **and exactly what to do next**.\n\n"
@@ -98,9 +98,9 @@ st.write(
 
 st.divider()
 
-# -------------------------------------------------
-# What this tool does
-# -------------------------------------------------
+# =================================================
+# WHAT THIS TOOL DOES (UNCHANGED)
+# =================================================
 st.subheader("What this tool does")
 st.markdown("""
 This system acts like a **virtual COO focused purely on cash discipline**.
@@ -115,9 +115,9 @@ It:
 
 st.divider()
 
-# -------------------------------------------------
-# Sample CSV
-# -------------------------------------------------
+# =================================================
+# SAMPLE CSV (UNCHANGED)
+# =================================================
 sample_csv = """date,amount,type,description
 2025-01-01,42000,Inflow,Sales
 2025-01-02,-15000,Outflow,Facebook Ads
@@ -134,9 +134,9 @@ st.download_button(
 
 st.divider()
 
-# -------------------------------------------------
-# Upload CSV
-# -------------------------------------------------
+# =================================================
+# UPLOAD CSV (UNCHANGED)
+# =================================================
 uploaded_file = st.file_uploader(
     "Upload your transactions CSV (bank / accounting / POS export)",
     type=["csv"]
@@ -155,9 +155,9 @@ if not required_cols.issubset(df.columns):
 df["date"] = pd.to_datetime(df["date"])
 df["amount"] = df["amount"].astype(float)
 
-# -------------------------------------------------
-# Core calculations (UNCHANGED)
-# -------------------------------------------------
+# =================================================
+# CORE CALCULATIONS (UNCHANGED)
+# =================================================
 cash_today = df["amount"].sum()
 inflows = df[df["amount"] > 0]["amount"].sum()
 
@@ -178,9 +178,9 @@ ads_mask = df["description"].str.contains(
 ad_spend = abs(df[ads_mask & (df["amount"] < 0)]["amount"].sum())
 ad_ratio = (ad_spend / inflows * 100) if inflows > 0 else 0
 
-# -------------------------------------------------
-# PHASE 1: KPI CARDS (ADD-ONLY)
-# -------------------------------------------------
+# =================================================
+# PHASE 2 ADDITION — KPI SNAPSHOT (ADD-ONLY)
+# =================================================
 if runway_days < 90 or ad_ratio > 40:
     risk_label = "High"
 elif runway_days < 150 or ad_ratio > 25:
@@ -228,9 +228,9 @@ with c4:
 
 st.divider()
 
-# -------------------------------------------------
-# AI COO SUMMARY (UNCHANGED)
-# -------------------------------------------------
+# =================================================
+# AI COO ANALYSIS (UNCHANGED)
+# =================================================
 st.subheader("🧠 AI COO Analysis")
 
 st.markdown(f"""
@@ -272,9 +272,9 @@ Protect:
 - Rent and operational continuity  
 """)
 
-# -------------------------------------------------
-# Founder Action Plan (UNCHANGED)
-# -------------------------------------------------
+# =================================================
+# FOUNDER ACTION PLAN (UNCHANGED)
+# =================================================
 st.divider()
 st.subheader("🧭 Founder Action Plan (Next 30 Days)")
 
@@ -291,9 +291,9 @@ st.markdown(f"""
 
 st.markdown(f"### 🎯 Decision confidence score: **{7.8 if ad_ratio < 30 else 6.4}/10**")
 
-# -------------------------------------------------
-# Expense breakdown (UNCHANGED)
-# -------------------------------------------------
+# =================================================
+# EXPENSE BREAKDOWN (UNCHANGED)
+# =================================================
 st.divider()
 st.subheader("📉 Expense category breakdown")
 
@@ -328,9 +328,9 @@ top_two_share = expense_breakdown.iloc[:2].sum() / expense_breakdown.sum() * 100
 if top_two_share > 65:
     st.warning(f"⚠️ Cost concentration risk detected: top 2 categories = {top_two_share:.0f}% of total expenses.")
 
-# -------------------------------------------------
-# Investor PDF (UNCHANGED)
-# -------------------------------------------------
+# =================================================
+# INVESTOR PDF (UNCHANGED)
+# =================================================
 st.divider()
 st.subheader("📄 Investor-ready cash narrative")
 
