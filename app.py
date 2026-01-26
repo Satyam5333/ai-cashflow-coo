@@ -18,76 +18,96 @@ st.set_page_config(page_title="AI Cash-Flow COO", layout="wide")
 st.markdown("""
 <style>
     .kpi-card {
-        background: #ffffff; padding: 1rem; border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-left: 5px solid #6366f1;
+        background: #ffffff; padding: 1.2rem; border-radius: 12px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.08); border-left: 5px solid #6366f1;
     }
-    .kpi-title { font-size: 0.8rem; color: #6b7280; font-weight: 600; }
-    .kpi-value { font-size: 1.8rem; font-weight: 700; }
+    .kpi-title { font-size: 0.85rem; color: #6b7280; font-weight: 600; text-transform: uppercase; }
+    .kpi-value { font-size: 1.8rem; font-weight: 700; margin-top: 0.5rem; }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🧠 AI Cash-Flow COO")
-st.write("Professional Early Warning System for SMEs")
+# =================================================
+# ---------------- HEADER ----------------
+# =================================================
+st.title("🧠 Cash-Flow Early Warning System for SMEs")
+st.subheader(
+    "Know when your business may face cash trouble — and what to do next."
+)
+
+st.markdown("""
+### What this tool does
+This system:
+- **Analyzes** your real transaction data
+- **Forecasts** cash position for the next 60 days
+- **Flags** overspending and cash risks
+- **Gives** clear, actionable recommendations
+  
+*(No dashboards. No jargon. Just decisions.)*
+""")
+
+st.markdown("---")
 
 # =================================================
-# SIDEBAR CONTROLS
+# SIDEBAR CONTROLS (D2C FOCUS)
 # =================================================
-st.sidebar.header("🕹️ Simulation Settings")
-opening_balance = st.sidebar.number_input("Current Bank Balance (INR)", value=200000)
-cod_delay = st.sidebar.slider("COD Payment Delay (Days)", 0, 30, 7)
-forecast_horizon = st.sidebar.slider("Forecast Horizon (Days)", 30, 90, 60)
+st.sidebar.header("🕹️ COO Simulation")
+opening_balance = st.sidebar.number_input("Starting Bank Balance (INR)", value=200000)
+cod_delay = st.sidebar.slider("Avg COD Payment Delay (Days)", 0, 30, 7)
+forecast_horizon = st.sidebar.slider("Forecast Look-ahead (Days)", 30, 90, 60)
 
 # =================================================
-# FILE UPLOADER
+# MAIN LOGIC
 # =================================================
-uploaded_file = st.file_uploader("Upload Transactions (CSV or PDF)", type=["csv", "pdf"])
+uploaded_file = st.file_uploader("Upload Transactions (CSV or PDF Bank Statement)", type=["csv", "pdf"])
 
 if uploaded_file:
     try:
-        # 1. LOAD DATA
+        # 1. LOAD AND NORMALIZE
         df = load_transactions(uploaded_file)
         
-        # 2. CALCULATE METRICS (Matching your metrics.py names)
+        # 2. RUN D2C HEURISTIC ENGINE
         metrics = calculate_business_metrics(df)
         
-        # Calculate current state
+        # Reconcile Cash Today (Opening + Movement)
         cash_now = opening_balance + df["amount"].sum()
-        # Use the runway_months from your engine
-        runway_months = metrics["runway_months"]
+        runway = metrics["runway_months"]
 
-        # 3. KPI DISPLAY
+        # 3. EXECUTIVE KPI CARDS
         c1, c2, c3, c4 = st.columns(4)
-        with c1: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Total Cash</div><div class='kpi-value'>₹{cash_now:,.0f}</div></div>", unsafe_allow_html=True)
-        with c2: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Runway</div><div class='kpi-value'>{runway_months} Months</div></div>", unsafe_allow_html=True)
-        with c3: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Ad Spend</div><div class='kpi-value'>{metrics['ad_spend_pct']*100:.1f}%</div></div>", unsafe_allow_html=True)
+        with c1: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Cash on Hand</div><div class='kpi-value'>₹{cash_now:,.0f}</div></div>", unsafe_allow_html=True)
+        with c2: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Est. Runway</div><div class='kpi-value'>{runway} Months</div></div>", unsafe_allow_html=True)
+        with c3: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Ad Spend %</div><div class='kpi-value'>{metrics['ad_spend_pct']*100:.1f}%</div></div>", unsafe_allow_html=True)
         with c4: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Return Rate</div><div class='kpi-value'>{metrics['return_rate']*100:.1f}%</div></div>", unsafe_allow_html=True)
 
-        # 4. FORECAST CHART (Using forecast_cashflow)
+        # 4. 60-DAY FORECAST VISUALIZATION
+        st.divider()
         st.subheader(f"📉 {forecast_horizon}-Day Cash Forecast")
         f_df = forecast_cashflow(
             cash_today=cash_now,
             start_date=df["date"].max(),
             days=forecast_horizon,
             avg_daily_sales=metrics["avg_daily_sales"],
-            avg_daily_ad_spend=metrics["avg_daily_outflow"] * 0.4, 
-            avg_daily_fixed_cost=metrics["avg_daily_outflow"] * 0.6,
+            avg_daily_ad_spend=metrics["avg_daily_ad_spend"], 
+            avg_daily_fixed_cost=metrics["avg_daily_fixed_cost"],
             cod_delay_days=cod_delay,
             return_rate=metrics["return_rate"]
         )
         
-        fig = px.line(f_df, x="date", y="closing_cash", title="Projected Cash Position")
-        fig.add_hline(y=0, line_dash="dash", line_color="red")
+        fig = px.line(f_df, x="date", y="closing_cash", 
+                     title="Projected Liquidity Position",
+                     labels={"closing_cash": "Cash Balance (INR)", "date": "Date"})
+        fig.add_hline(y=0, line_dash="dash", line_color="#ff4b4b", annotation_text="Cash Exhausted")
+        fig.update_layout(hovermode="x unified")
         st.plotly_chart(fig, use_container_width=True)
 
-        # 5. AI COO ADVICE
+        # 5. STRATEGIC COO ADVICE
         st.divider()
         st.subheader("🤖 Executive Strategy Report")
         
         decisions = generate_decisions(metrics)
-        
         advice_text = generate_coo_advice(
             cash_today=cash_now,
-            runway_days=runway_months,
+            runway_days=runway,
             ad_spend_pct=metrics["ad_spend_pct"],
             return_rate=metrics["return_rate"],
             decisions=decisions
@@ -96,6 +116,6 @@ if uploaded_file:
         st.info(advice_text)
         
     except Exception as e:
-        st.error(f"Error analyzing data: {e}")
+        st.error(f"Analysis Interrupted: {e}. Please ensure your CSV has 'date' and 'amount' columns.")
 else:
-    st.info("Please upload a CSV or PDF bank statement to begin analysis.")
+    st.info("👋 Welcome! Please upload your transaction data to see your cash trajectory.")
