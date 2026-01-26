@@ -5,6 +5,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from datetime import timedelta
 from io import BytesIO
 import re
+import pdfplumber
 
 # =================================================
 # PAGE CONFIG
@@ -106,23 +107,86 @@ st.download_button(
     mime="text/csv",
 )
 st.divider()
+# =================================================
+# PDF BANK STATEMENT PARSER (TEXT-BASED)
+# =================================================
+def parse_bank_pdf(uploaded_file):
+    rows = []
+
+    with pdfplumber.open(uploaded_file) as pdf:
+        for page in pdf.pages:
+            tables = page.extract_tables()
+            if not tables:
+                continue
+
+            for table in tables:
+                headers = [str(h).lower().strip() if h else "" for h in table[0]]
+
+                for row in table[1:]:
+                    if not row or len(row) != len(headers):
+                        continue
+
+                    record = dict(zip(headers, row))
+                    rows.append(record)
+
+    if not rows:
+        raise ValueError("No readable tables found in PDF")
+
+    df = pd.DataFrame(rows)
+    df.columns = [c.lower().strip() for c in df.columns]
+
+    # -------- COLUMN NORMALIZATION --------
+    col_map = {}
+
+    for c in df.columns:
+        if "date" in c:
+            col_map[c] = "date"
+        elif "desc" in c or "narration" in c or "particular" in c:
+            col_map[c] = "description"
+        elif "debit" in c or c == "dr":
+            col_map[c] = "debit"
+        elif "credit" in c or c == "cr":
+            col_map[c] = "credit"
+        elif "amount" in c:
+            col_map[c] = "amount"
+
+    df = df.rename(columns=col_map)
+
+    # -------- AMOUNT LOGIC --------
+    if "amount" not in df.columns:
+        df["debit"] = pd.to_numeric(df.get("debit", 0), errors="coerce").fillna(0)
+        df["credit"] = pd.to_numeric(df.get("credit", 0), errors="coerce").fillna(0)
+        df["amount"] = df["credit"] - df["debit"]
+
+    # -------- FINAL CLEANUP --------
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
+    df["description"] = df.get("description", "Transaction")
+
+    df = df.dropna(subset=["date", "amount"])
+
+    return df[["date", "amount", "description"]]
 
 # =================================================
-# FILE UPLOAD (CSV / EXCEL ONLY — STABLE)
+# READ FILE (CSV / EXCEL / PDF)
 # =================================================
-uploaded_file = st.file_uploader(
-    "Upload transactions (CSV / Excel / PDF)",
-    type=["csv", "xlsx", "pdf"]
-)
-if uploaded_file and uploaded_file.name.lower().endswith(".pdf"):
-    st.warning(
-        "⚠️ PDF support depends on format.\n"
-        "For guaranteed accuracy, please upload CSV or Excel."
-    )
+if uploaded_file.name.lower().endswith(".pdf"):
+    try:
+        df = parse_bank_pdf(uploaded_file)
+        st.success("✅ Bank PDF parsed successfully")
+    except Exception as e:
+        st.error(
+            "❌ Could not reliably extract this PDF.\n\n"
+            "Please upload CSV / Excel for guaranteed accuracy."
+        )
+        st.stop()
 
+elif uploaded_file.name.lower().endswith(".csv"):
+    df = pd.read_csv(uploaded_file)
 
-if not uploaded_file:
-    st.stop()
+else:
+    df = pd.read_excel(uploaded_file)
+
 
 # =================================================
 # READ FILE
