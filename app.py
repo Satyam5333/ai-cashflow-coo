@@ -131,21 +131,26 @@ if uploaded_file:
         for i in insights:
             st.write("• " + i)
 
-        # -------------------------
-        # Expense Pie (SIMPLIFIED)
-        # -------------------------
-        st.markdown("---")
-        st.markdown("## 📉 Expense category breakdown")
+      # --- Expense category pie chart (clean & compact) ---
+fig, ax = plt.subplots(figsize=(5, 5))  # 👈 smaller size
 
-        fig, ax = plt.subplots(figsize=(6, 6))
-        ax.pie(
-            expense_summary.values,
-            labels=expense_summary.index,
-            autopct="%1.1f%%",
-            startangle=90
-        )
-        ax.axis("equal")
-        st.pyplot(fig)
+labels = list(expense_breakdown.keys())
+values = list(expense_breakdown.values())
+
+ax.pie(
+    values,
+    labels=labels,
+    autopct='%1.1f%%',
+    startangle=90,
+    pctdistance=0.75,     # 👈 percentages move inward
+    labeldistance=1.1,    # 👈 labels move outward
+    wedgeprops={'linewidth': 1, 'edgecolor': 'white'}
+)
+
+ax.set_title("Expense category breakdown", fontsize=14)
+ax.axis('equal')  # keeps it circular
+
+st.pyplot(fig)
 
         # -------------------------
         # Cost concentration risk
