@@ -48,7 +48,35 @@ This system:
 st.markdown("---")
 
 # =================================================
-# SIDEBAR CONTROLS (D2C FOCUS)
+# 📥 SAMPLE CSV DOWNLOAD SECTION (NEW)
+# =================================================
+st.subheader("Get Started")
+st.write("Don't have a CSV ready? Download this sample Shopify seller dataset to test the system:")
+
+# This is a heuristic-friendly CSV for your D2C metrics engine
+sample_data = """date,amount,type,description
+2026-01-01,150000,inflow,Shopify Payout
+2026-01-02,-45000,outflow,Meta Ads - Facebook/Insta
+2026-01-05,-12000,outflow,Office Rent
+2026-01-10,-25000,outflow,Staff Salary
+2026-01-12,-5000,outflow,Shopify Subscription
+2026-01-15,120000,inflow,Shopify Payout
+2026-01-18,-8000,outflow,Customer Refund
+2026-01-20,-35000,outflow,Meta Ads - Retargeting
+2026-01-25,-4000,outflow,Google Workspace Tool
+"""
+
+st.download_button(
+    label="📥 Download Sample D2C Transactions CSV",
+    data=sample_data,
+    file_name="sample_d2c_transactions.csv",
+    mime="text/csv",
+)
+
+st.markdown("---")
+
+# =================================================
+# SIDEBAR CONTROLS
 # =================================================
 st.sidebar.header("🕹️ COO Simulation")
 opening_balance = st.sidebar.number_input("Starting Bank Balance (INR)", value=200000)
@@ -68,7 +96,7 @@ if uploaded_file:
         # 2. RUN D2C HEURISTIC ENGINE
         metrics = calculate_business_metrics(df)
         
-        # Reconcile Cash Today (Opening + Movement)
+        # Reconcile Cash Today
         cash_now = opening_balance + df["amount"].sum()
         runway = metrics["runway_months"]
 
@@ -118,4 +146,4 @@ if uploaded_file:
     except Exception as e:
         st.error(f"Analysis Interrupted: {e}. Please ensure your CSV has 'date' and 'amount' columns.")
 else:
-    st.info("👋 Welcome! Please upload your transaction data to see your cash trajectory.")
+    st.info("👋 Welcome! Please upload your transaction data or use the sample CSV above to begin.")
