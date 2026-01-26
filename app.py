@@ -34,24 +34,24 @@ st.subheader("Know when your business may face cash trouble — and what to do n
 
 st.markdown("""
 ### What this tool does
-- **Analyzes** real transaction data
-- **Breakdown** expenses into Ads, Salary, and Rent
-- **Forecasts** cash for the next 60 days
+- **Analyzes** real transaction data to find your "True Burn"
+- **Categorizes** spending into Ads, Salary, and Rent heuristics
+- **Forecasts** cash position for the next 60 days
 """)
 
 # =================================================
 # 📥 SAMPLE CSV DOWNLOAD
 # =================================================
-sample_data = """date,amount,type,description
-2026-01-01,150000,inflow,Shopify Payout
-2026-01-02,-45000,outflow,Meta Ads - Facebook/Insta
-2026-01-05,-12000,outflow,Office Rent
-2026-01-10,-25000,outflow,Staff Salary
-2026-01-12,-5000,outflow,Shopify Subscription
-2026-01-15,120000,inflow,Shopify Payout
-2026-01-18,-8000,outflow,Customer Refund
-2026-01-20,-35000,outflow,Meta Ads - Retargeting
-2026-01-25,-4000,outflow,Google Workspace Tool
+sample_data = """date,amount,description
+2026-01-01,150000,Shopify Payout
+2026-01-02,-45000,Meta Ads - Facebook/Insta
+2026-01-05,-12000,Office Rent
+2026-01-10,-25000,Staff Salary
+2026-01-12,-5000,Shopify Subscription
+2026-01-15,120000,Shopify Payout
+2026-01-18,-8000,Customer Refund
+2026-01-20,-35000,Meta Ads - Retargeting
+2026-01-25,-4000,Google Workspace Tool
 """
 
 st.download_button("📥 Download Sample D2C Transactions CSV", data=sample_data, file_name="sample_d2c_transactions.csv", mime="text/csv")
@@ -73,29 +73,46 @@ uploaded_file = st.file_uploader("Upload Transactions", type=["csv", "pdf"])
 
 if uploaded_file:
     try:
+        # 1. LOAD DATA
         df = load_transactions(uploaded_file)
+        
+        # --- SMART SIGN CORRECTION LAYER ---
+        # Ensures math direction is correct based on keywords
+        def reconcile_signs(row):
+            desc = str(row['description']).lower()
+            val = abs(row['amount'])
+            # Keywords that must be OUTFLOWS (-)
+            if any(k in desc for k in ["ad", "facebook", "meta", "google", "rent", "salary", "refund", "payout fee"]):
+                return -val
+            # Keywords that must be INFLOWS (+)
+            if any(k in desc for k in ["payout", "sale", "deposit", "credit"]):
+                return val
+            return row['amount']
+        
+        df['amount'] = df.apply(reconcile_signs, axis=1)
+
+        # 2. RUN METRICS
         metrics = calculate_business_metrics(df)
         cash_now = opening_balance + df["amount"].sum()
 
-        # 1. KPI CARDS
+        # 3. KPI CARDS
         c1, c2, c3, c4 = st.columns(4)
-        with c1: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Cash</div><div class='kpi-value'>₹{cash_now:,.0f}</div></div>", unsafe_allow_html=True)
+        with c1: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Cash Today</div><div class='kpi-value'>₹{cash_now:,.0f}</div></div>", unsafe_allow_html=True)
         with c2: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Runway</div><div class='kpi-value'>{metrics['runway_months']} Mo</div></div>", unsafe_allow_html=True)
         with c3: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Ad Spend %</div><div class='kpi-value'>{metrics['ad_spend_pct']*100:.1f}%</div></div>", unsafe_allow_html=True)
         with c4: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Returns</div><div class='kpi-value'>{metrics['return_rate']*100:.1f}%</div></div>", unsafe_allow_html=True)
 
-        # 2. EXPENSE BREAKDOWN SECTION (NEW)
+        # 4. EXPENSE BREAKDOWN
         st.divider()
-        st.subheader("📊 Expense Category Breakdown")
+        st.subheader("📊 Spend Distribution")
         
-        # Categorization Logic
         def categorize(desc):
             d = str(desc).lower()
-            if any(x in d for x in ["ad", "facebook", "meta", "google", "marketing"]): return "Ads"
-            if any(x in d for x in ["salary", "wage", "payroll"]): return "Salary"
-            if any(x in d for x in ["rent", "office", "lease"]): return "Rent"
-            if any(x in d for x in ["software", "saas", "tool", "aws", "shopify"]): return "Software/SaaS"
-            return "Other Expenses"
+            if any(x in d for x in ["ad", "facebook", "meta", "google"]): return "Ads"
+            if any(x in d for x in ["salary", "wage"]): return "Salary"
+            if any(x in d for x in ["rent", "office"]): return "Rent"
+            if any(x in d for x in ["software", "saas", "shopify"]): return "Software"
+            return "Other"
 
         expenses = df[df["amount"] < 0].copy()
         expenses["Category"] = expenses["description"].apply(categorize)
@@ -103,28 +120,38 @@ if uploaded_file:
 
         col_a, col_b = st.columns([1, 1])
         with col_a:
-            fig_pie = px.pie(cat_df, values='amount', names='Category', hole=0.4, title="Spend Distribution")
-            st.plotly_chart(fig_pie, use_container_width=True)
+            st.plotly_chart(px.pie(cat_df, values='amount', names='Category', hole=0.4), use_container_width=True)
         with col_b:
-            st.write("### Expense Details")
             st.table(cat_df.sort_values(by="amount", ascending=False))
 
-        # 3. FORECAST
+        # 5. FORECAST
         st.divider()
         st.subheader(f"📉 {forecast_horizon}-Day Cash Forecast")
-        f_df = forecast_cashflow(cash_today=cash_now, start_date=df["date"].max(), days=forecast_horizon,
-                               avg_daily_sales=metrics["avg_daily_sales"], avg_daily_ad_spend=metrics["avg_daily_ad_spend"], 
-                               avg_daily_fixed_cost=metrics["avg_daily_fixed_cost"], cod_delay_days=cod_delay, return_rate=metrics["return_rate"])
-        st.plotly_chart(px.line(f_df, x="date", y="closing_cash"), use_container_width=True)
+        f_df = forecast_cashflow(
+            cash_today=cash_now, start_date=df["date"].max(), days=forecast_horizon,
+            avg_daily_sales=metrics["avg_daily_sales"], 
+            avg_daily_ad_spend=metrics["avg_daily_ad_spend"], 
+            avg_daily_fixed_cost=metrics["avg_daily_fixed_cost"], 
+            cod_delay_days=cod_delay, return_rate=metrics["return_rate"]
+        )
+        
+        fig = px.line(f_df, x="date", y="closing_cash", title="Liquidity Trajectory")
+        fig.add_hline(y=0, line_dash="dash", line_color="red")
+        st.plotly_chart(fig, use_container_width=True)
 
-        # 4. ADVICE
+        # 6. ADVICE
         st.divider()
         st.subheader("🤖 Executive Strategy Report")
-        advice_text = generate_coo_advice(cash_today=cash_now, runway_days=metrics["runway_months"], 
-                                         ad_spend_pct=metrics["ad_spend_pct"], return_rate=metrics["return_rate"], decisions=generate_decisions(metrics))
+        advice_text = generate_coo_advice(
+            cash_today=cash_now, 
+            runway_days=metrics["runway_months"], 
+            ad_spend_pct=metrics["ad_spend_pct"], 
+            return_rate=metrics["return_rate"], 
+            decisions=generate_decisions(metrics)
+        )
         st.info(advice_text)
         
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Analysis Error: {e}")
 else:
-    st.info("Upload data to begin.")
+    st.info("👋 Welcome! Please upload your Shopify or Bank statement CSV to begin.")
