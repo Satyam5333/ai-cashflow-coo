@@ -8,6 +8,58 @@ from io import BytesIO
 st.set_page_config(page_title="AI Cash-Flow COO", layout="centered")
 
 # -------------------------------------------------
+# UI POLISH (GLOBAL, ADD-ONLY, SAFE)
+# -------------------------------------------------
+st.markdown("""
+<style>
+
+/* Overall page background */
+html, body {
+    background-color: #f7f9fc;
+}
+
+/* Improve content spacing */
+section.main > div {
+    padding-top: 1.5rem;
+}
+
+/* Better typography */
+h1 {
+    letter-spacing: -0.02em;
+}
+h2, h3 {
+    letter-spacing: -0.01em;
+}
+
+/* Improve paragraph readability */
+p {
+    line-height: 1.55;
+    font-size: 0.95rem;
+}
+
+/* Make Streamlit alerts look premium */
+div[data-testid="stAlert"] {
+    border-radius: 10px;
+}
+
+/* Buttons */
+button {
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+}
+
+/* File uploader polish */
+div[data-testid="stFileUploader"] {
+    padding: 1rem;
+    border-radius: 10px;
+    background-color: #ffffff;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+# -------------------------------------------------
 # Header
 # -------------------------------------------------
 st.title("🧠 Cash-Flow Early Warning System for SMEs")
