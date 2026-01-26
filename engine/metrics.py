@@ -1,8 +1,8 @@
 import pandas as pd
 
 def calculate_business_metrics(df: pd.DataFrame):
-    """Acts as a Strategic COO: Finds hidden health signals."""
-    # Ensure columns are standardized
+    """Calculates KPIs for the Shopify COO dashboard."""
+    # Standardize columns
     df.columns = df.columns.str.lower().str.strip()
     
     # 1. Sales & Cash Position
@@ -16,7 +16,7 @@ def calculate_business_metrics(df: pd.DataFrame):
     returns_mask = df["description"].str.contains("refund|return|reverse", case=False, na=False)
     returns = df.loc[returns_mask & (df["amount"] < 0), "amount"].abs().sum()
 
-    # 3. Monthly Burn Rate (Crucial for What-If Analysis)
+    # 3. Monthly & Daily Burn Rate
     last_date = df["date"].max()
     thirty_days_ago = last_date - pd.Timedelta(days=30)
     recent_df = df[df["date"] >= thirty_days_ago]
@@ -24,15 +24,15 @@ def calculate_business_metrics(df: pd.DataFrame):
     daily_sales = recent_df[recent_df["amount"] > 0]["amount"].sum() / 30
     daily_outflow = recent_df[recent_df["amount"] < 0]["amount"].abs().sum() / 30
     
-    # Burn is the net loss per month
+    # Burn is the net loss
     monthly_burn = (daily_outflow - daily_sales) * 30
     daily_burn = daily_outflow - daily_sales
 
-    # 4. Runway (Always returns a number for the logic to work)
+    # 4. Runway (Months)
     if monthly_burn > 0:
         runway_months = round(current_cash / monthly_burn, 1)
     else:
-        runway_months = 99.0  # Surplus Cash
+        runway_months = 99.0  # Cash flow positive
 
     return {
         "cash_today": current_cash,
@@ -43,6 +43,6 @@ def calculate_business_metrics(df: pd.DataFrame):
         "return_rate": (returns / total_inflow) if total_inflow > 0 else 0,
         "avg_daily_sales": daily_sales,
         "avg_daily_ad_spend": ad_spend / 30,
-        "avg_daily_fixed_cost": (daily_outflow - (ad_spend / 30)),
+        "avg_daily_fixed_cost": max(0, daily_outflow - (ad_spend / 30)),
         "avg_daily_outflow": daily_outflow
     }
