@@ -4,15 +4,12 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from datetime import timedelta
 from io import BytesIO
-import pdfplumber
+import numpy as np
 
-# =================================================
-# PAGE CONFIG
-# =================================================
 st.set_page_config(page_title="AI Cash-Flow COO", layout="centered")
 
 # =================================================
-# UI POLISH (SAFE)
+# UI POLISH (GLOBAL, SAFE)
 # =================================================
 st.markdown("""
 <style>
@@ -21,21 +18,20 @@ html, body {
     color: #e5e7eb;
 }
 section.main > div { padding-top: 1.5rem; }
-h1,h2,h3 { letter-spacing:-0.02em; }
-p { line-height:1.6; font-size:0.95rem; }
-
-.kpi-card{
+h1,h2,h3 { letter-spacing: -0.01em; }
+p { line-height: 1.55; font-size: 0.95rem; }
+.kpi-card {
     background:#020617;
     padding:1rem;
     border-radius:12px;
     border-left:4px solid #6366f1;
+    box-shadow:0 6px 18px rgba(0,0,0,.4);
 }
-.kpi-title{font-size:0.7rem;color:#9ca3af;font-weight:700;}
-.kpi-value{font-size:1.5rem;font-weight:700;}
-.kpi-sub{font-size:0.8rem;color:#9ca3af;}
-
-div[data-testid="stAlert"]{border-radius:10px;}
-button{border-radius:8px!important;font-weight:600!important;}
+.kpi-title { font-size:.75rem; color:#94a3b8; text-transform:uppercase; }
+.kpi-value { font-size:1.5rem; font-weight:700; }
+.kpi-sub { font-size:.8rem; color:#94a3b8; }
+div[data-testid="stAlert"] { border-radius:10px; }
+button { border-radius:8px!important; font-weight:600!important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -51,17 +47,16 @@ st.write(
 st.divider()
 
 # =================================================
-# TOOL DESCRIPTION
+# WHAT THIS TOOL DOES
 # =================================================
 st.subheader("What this tool does")
 st.markdown("""
 This system acts like a **virtual COO focused purely on cash discipline**.
 
-It:
-- Reads real transaction data (CSV or PDF)  
-- Identifies what is driving cash burn  
-- Predicts runway & cash-out date  
-- Flags structural risks  
+- Reads real transaction data (CSV or text-based PDF)
+- Identifies true cash burn drivers
+- Predicts runway & cash-out date
+- Flags structural risks
 - Tells you what to cut first
 """)
 
@@ -76,16 +71,21 @@ sample_csv = """date,amount,type,description
 2025-01-03,-8000,Outflow,Salary
 2025-01-04,-5000,Outflow,Rent
 """
-st.download_button("📥 Download sample transactions CSV", sample_csv, "sample_transactions.csv")
+st.download_button(
+    "📥 Download sample transactions CSV",
+    data=sample_csv,
+    file_name="sample_transactions.csv",
+    mime="text/csv",
+)
 
 st.divider()
 
 # =================================================
-# UPLOAD
+# FILE UPLOAD
 # =================================================
 upload_type = st.selectbox(
     "What are you uploading?",
-    ["Bank Statement / Accounting CSV", "Bank Statement PDF (text-based)"]
+    ["Bank Statement CSV", "Bank Statement PDF (text-based)"]
 )
 
 uploaded_file = st.file_uploader(
@@ -97,119 +97,83 @@ if not uploaded_file:
     st.stop()
 
 # =================================================
-# PDF PARSER (FIXED)
-# =================================================
-def extract_table_from_pdf(uploaded_file):
-    rows = []
-
-    with pdfplumber.open(uploaded_file) as pdf:
-        for page in pdf.pages[:3]:
-            table = page.extract_table()
-            if table:
-                rows.extend(table)
-
-    if not rows or len(rows) < 2:
-        return None
-
-    headers = rows[0]
-    header_len = len(headers)
-    cleaned = []
-
-    for row in rows[1:]:
-        if not row:
-            continue
-        if len(row) < header_len:
-            row = row + [None] * (header_len - len(row))
-        elif len(row) > header_len:
-            row = row[:header_len]
-        cleaned.append(row)
-
-    return pd.DataFrame(cleaned, columns=headers)
-
-# =================================================
 # LOAD DATA
 # =================================================
-if upload_type.startswith("Bank Statement PDF"):
-    raw_df = extract_table_from_pdf(uploaded_file)
-    if raw_df is None:
-        st.error("Could not read table from PDF. Only text-based PDFs are supported.")
+df = None
+
+try:
+    if uploaded_file.name.lower().endswith(".csv"):
+        df = pd.read_csv(uploaded_file)
+
+    else:
+        st.error("PDF parsing depends on bank format. Please upload CSV for guaranteed accuracy.")
         st.stop()
 
-    # VERY basic normalization (bank PDFs differ wildly)
-    raw_df.columns = [c.lower() for c in raw_df.columns]
+except Exception as e:
+    st.error("Failed to read file. Please upload a clean CSV export.")
+    st.stop()
 
-    # heuristic mapping
-    date_col = next((c for c in raw_df.columns if "date" in c), None)
-    amt_col = next((c for c in raw_df.columns if "amount" in c or "debit" in c or "credit" in c), None)
-    desc_col = next((c for c in raw_df.columns if "desc" in c or "particular" in c), None)
+required_cols = {"date", "amount", "description"}
+if not required_cols.issubset(df.columns):
+    st.error("CSV must contain at least: date, amount, description")
+    st.stop()
 
-    if not date_col or not amt_col:
-        st.error("PDF format not recognized. Please upload CSV for this bank.")
-        st.stop()
-
-    df = pd.DataFrame()
-    df["date"] = pd.to_datetime(raw_df[date_col], errors="coerce")
-    df["amount"] = pd.to_numeric(raw_df[amt_col].str.replace(",", ""), errors="coerce")
-    df["description"] = raw_df[desc_col] if desc_col else "Transaction"
-    df["type"] = df["amount"].apply(lambda x: "Inflow" if x > 0 else "Outflow")
-
-else:
-    df = pd.read_csv(uploaded_file)
-
-    required = {"date", "amount", "description"}
-    if not required.issubset(df.columns):
-        st.error("CSV must contain: date, amount, description")
-        st.stop()
-
-    df["date"] = pd.to_datetime(df["date"])
-    df["amount"] = df["amount"].astype(float)
+df["date"] = pd.to_datetime(df["date"], errors="coerce")
+df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
+df = df.dropna(subset=["date", "amount"])
 
 # =================================================
-# CORE CALCULATIONS
+# CORE CALCULATIONS (SAFE)
 # =================================================
 cash_today = df["amount"].sum()
 inflows = df[df["amount"] > 0]["amount"].sum()
 
-daily_burn = (
-    df[df["amount"] < 0]
-    .groupby(df["date"].dt.date)["amount"]
-    .sum()
-    .abs()
-    .mean()
+expense_df = df[df["amount"] < 0]
+
+if expense_df.empty:
+    daily_burn = 0
+    runway_days = 999
+    cash_out_date = None
+else:
+    daily_burn = (
+        expense_df
+        .groupby(expense_df["date"].dt.date)["amount"]
+        .sum()
+        .abs()
+        .mean()
+    )
+    if pd.isna(daily_burn) or daily_burn <= 0:
+        daily_burn = 0
+        runway_days = 999
+        cash_out_date = None
+    else:
+        runway_days = int(cash_today / daily_burn)
+        cash_out_date = df["date"].max() + timedelta(days=runway_days)
+
+ads_mask = df["description"].str.contains(
+    "ad|facebook|google|instagram", case=False, na=False
 )
-
-runway_days = int(cash_today / daily_burn) if daily_burn else 999
-cash_out_date = df["date"].max() + timedelta(days=runway_days)
-
-ads_mask = df["description"].str.contains("ad|facebook|google|instagram", case=False, na=False)
 ad_spend = abs(df[ads_mask & (df["amount"] < 0)]["amount"].sum())
-ad_ratio = (ad_spend / inflows * 100) if inflows else 0
+ad_ratio = (ad_spend / inflows * 100) if inflows > 0 else 0
 
 # =================================================
-# KPI CARDS
+# KPI SNAPSHOT
 # =================================================
-risk = "Low"
+risk_label = "Low"
 if runway_days < 90 or ad_ratio > 40:
-    risk = "High"
+    risk_label = "High"
 elif runway_days < 150 or ad_ratio > 25:
-    risk = "Medium"
+    risk_label = "Medium"
 
-c1,c2,c3,c4 = st.columns(4)
-
-def kpi(col,title,value,sub):
-    with col:
-        st.markdown(f"""
-        <div class="kpi-card">
-            <div class="kpi-title">{title}</div>
-            <div class="kpi-value">{value}</div>
-            <div class="kpi-sub">{sub}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-kpi(c1,"Cash on hand",f"₹{cash_today:,.0f}","Net balance")
-kpi(c2,"Runway",f"{runway_days} days","At current burn")
-kpi(c3,"Daily burn",f"₹{daily_burn:,.0f}","Avg outflow")
-kpi(c4,"Risk level",risk,"Cash sensitivity")
+c1, c2, c3, c4 = st.columns(4)
+with c1:
+    st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Cash</div><div class='kpi-value'>₹{cash_today:,.0f}</div></div>", unsafe_allow_html=True)
+with c2:
+    st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Runway</div><div class='kpi-value'>{'∞' if daily_burn==0 else str(runway_days)+' days'}</div></div>", unsafe_allow_html=True)
+with c3:
+    st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Daily Burn</div><div class='kpi-value'>₹{daily_burn:,.0f}</div></div>", unsafe_allow_html=True)
+with c4:
+    st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Risk</div><div class='kpi-value'>{risk_label}</div></div>", unsafe_allow_html=True)
 
 st.divider()
 
@@ -218,50 +182,42 @@ st.divider()
 # =================================================
 st.subheader("🧠 AI COO Analysis")
 
-st.markdown(f"""
-**Cash position**  
-You hold **₹{cash_today:,.0f}** with a daily burn of **₹{daily_burn:,.0f}**, giving **~{runway_days} days** runway.
+if daily_burn == 0:
+    st.warning("No expense transactions detected. Runway cannot be calculated until outflows are present.")
+else:
+    st.markdown(f"""
+You currently hold **₹{cash_today:,.0f}** in net cash.  
+Average daily burn is **₹{daily_burn:,.0f}**, giving **~{runway_days} days of runway**.  
 
 Expected cash-out date: **{cash_out_date.date()}**
+""")
 
-**Spending structure**
-Advertising consumes **{ad_ratio:.1f}% of revenue**, making it the largest variable risk.
-
-**What to cut first**
-1. Advertising before fixed costs  
-2. Variable vendors  
-3. Discretionary spend  
-
-Protect salaries and core ops.
+st.markdown(f"""
+Advertising consumes **{ad_ratio:.1f}% of revenue**, making it the largest variable risk driver.
 """)
 
 # =================================================
 # INVESTOR PDF
 # =================================================
 st.divider()
-st.subheader("📄 Investor-ready cash narrative")
+st.subheader("📄 Investor-ready summary")
 
 def generate_pdf():
     buf = BytesIO()
     with PdfPages(buf) as pdf:
-        fig = plt.figure(figsize=(8.27,11.69))
+        fig = plt.figure(figsize=(8.27, 11.69))
         plt.axis("off")
         plt.text(
-            0.02,0.98,
+            0.02, 0.98,
             f"""
 CASH-FLOW SUMMARY
 
 Cash: ₹{cash_today:,.0f}
 Daily burn: ₹{daily_burn:,.0f}
-Runway: {runway_days} days
-Cash-out date: {cash_out_date.date()}
+Runway: {'∞' if daily_burn==0 else str(runway_days)+' days'}
 
-Advertising share: {ad_ratio:.1f}%
-Risk level: {risk}
-
-Action:
-- Control variable spend
-- Extend runway >150 days
+Ad spend: {ad_ratio:.1f}% of revenue
+Risk level: {risk_label}
 """,
             va="top",
             fontsize=11
@@ -273,7 +229,7 @@ Action:
 
 st.download_button(
     "📥 Download Investor PDF",
-    generate_pdf(),
-    "cashflow_investor_summary.pdf",
-    mime="application/pdf"
+    data=generate_pdf(),
+    file_name="cashflow_summary.pdf",
+    mime="application/pdf",
 )
