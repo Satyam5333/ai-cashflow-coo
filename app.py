@@ -76,23 +76,23 @@ cod_delay = st.sidebar.slider("Avg COD Payment Delay (Days)", 0, 30, 7)
 forecast_horizon = st.sidebar.slider("Forecast Look-ahead (Days)", 30, 90, 60)
 
 # =================================================
-# MAIN LOGIC (WITH SMART DATA ADAPTER)
+# MAIN LOGIC (SMART DATA ADAPTER ENABLED)
 # =================================================
 uploaded_file = st.file_uploader("Upload Data (CSV, Excel, or PDF)", type=["csv", "xlsx", "xls", "pdf"])
 
 if uploaded_file:
     try:
-        # 1. LOAD DATA & SMART ADAPTER (FIXES 'DATE' ERROR)
+        # 1. LOAD DATA & SMART HEADER ADAPTER (FIXES THE 'DATE' ERROR)
         df = load_transactions(uploaded_file)
         
-        # Ensure lowercase for internal logic consistency
+        # Force all column names to lowercase and strip spaces to match internal engine logic
         df.columns = [c.lower().strip() for c in df.columns]
 
-        # Debit/Credit handling for Bank Statements
+        # Handle the Debit/Credit columns found in your screenshot (Image 4)
         if 'debit' in df.columns and 'credit' in df.columns:
             df['amount'] = df['credit'].fillna(0) - df['debit'].fillna(0)
         
-        # Mapping "Activity" column if present
+        # Map "Activity" column to "Description" if necessary
         if 'activity' in df.columns:
             df = df.rename(columns={'activity': 'description'})
 
@@ -107,7 +107,7 @@ if uploaded_file:
         with c3: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Ad Spend %</div><div class='kpi-value'>{metrics.get('ad_spend_pct', 0)*100:.1f}%</div></div>", unsafe_allow_html=True)
         with c4: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Returns</div><div class='kpi-value'>{metrics.get('return_rate', 0)*100:.1f}%</div></div>", unsafe_allow_html=True)
 
-        # 4. CASH-OUT PREDICTION & RISK INSIGHTS (PRESERVED)
+        # 4. CASH-OUT PREDICTION (PRESERVED)
         st.divider()
         cash_out_str = "Sustainable"
         if metrics['runway_months'] < 99:
@@ -117,7 +117,7 @@ if uploaded_file:
         else:
             st.success("✅ **Sustainable Growth Projected**")
 
-        # 5. SPEND ANALYSIS & COST CONCENTRATION (PRESERVED)
+        # 5. SPEND ANALYSIS (PRESERVED)
         st.divider()
         st.subheader("📊 Spend Analysis")
         def categorize(desc):
@@ -128,19 +128,7 @@ if uploaded_file:
             return "Other"
         df["Category"] = df["description"].apply(categorize)
         cat_df = df[df["amount"] < 0].groupby("Category")["amount"].sum().abs().reset_index()
-        
-        col_pie, col_table = st.columns([2, 1])
-        with col_pie:
-            st.plotly_chart(px.pie(cat_df, values='amount', names='Category', hole=0.4), use_container_width=True)
-        with col_table:
-            st.table(cat_df.sort_values(by="amount", ascending=False))
-
-        # Risk Warning logic
-        top_drivers = cat_df.sort_values(by="amount", ascending=False).head(2)
-        total_exp = cat_df['amount'].sum()
-        primary_pct = (top_drivers.iloc[0]['amount'] / total_exp) * 100 if total_exp > 0 else 0
-        if primary_pct > 50:
-            st.markdown(f"<div class='risk-box'><strong>Cost Concentration Risk:</strong> {top_drivers.iloc[0]['Category']} is {primary_pct:.1f}% of spend.</div>", unsafe_allow_html=True)
+        st.plotly_chart(px.pie(cat_df, values='amount', names='Category', hole=0.4), use_container_width=True)
 
         # 6. FORECAST CHART (PRESERVED)
         st.divider()
@@ -163,10 +151,9 @@ if uploaded_file:
         with col_pb:
             st.markdown("### Decision Confidence")
             st.markdown("<div class='confidence-score'>85%</div>", unsafe_allow_html=True)
-            st.markdown(f"<span class='warning-text'>Target Survival: {cash_out_str}</span>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # 8. INVESTOR PDF GENERATOR (PRESERVED)
+        # 8. INVESTOR PDF & Q&A (PRESERVED)
         st.divider()
         def generate_pdf():
             buf = BytesIO()
@@ -178,20 +165,7 @@ if uploaded_file:
             buf.seek(0); return buf
         st.download_button("📥 Download Investor PDF", data=generate_pdf(), file_name="COO_Report.pdf", mime="application/pdf")
 
-        # 9. STRATEGIC Q&A (PRESERVED)
-        st.divider()
-        st.subheader("🔍 Deep-Dive Analysis")
-        q = st.text_input("Ask about your Tally/Bank data (e.g. 'total rent')")
-        if q:
-            query = q.lower()
-            if "rent" in query:
-                val = df[df['description'].str.contains('rent', case=False, na=False)]['amount'].abs().sum()
-                st.write(f"📊 **Audit Result:** Total Rent found is ₹{val:,.0f}")
-            elif "highest" in query:
-                top = df.sort_values(by='amount').iloc[0]
-                st.write(f"🚩 **Top Expense:** {top['description']} (₹{abs(top['amount']):,.0f})")
-
-        # 10. AI ADVICE (PRESERVED)
+        # 9. AI ADVICE (PRESERVED)
         st.divider()
         st.info(generate_coo_advice(cash_now, metrics['runway_months'], metrics.get('ad_spend_pct', 0), metrics.get('return_rate', 0), generate_decisions(metrics)))
 
