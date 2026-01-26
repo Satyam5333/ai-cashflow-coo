@@ -40,7 +40,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =================================================
-# ---------------- HEADER (PRESERVED) ----------------
+# ---------------- HEADER ----------------
 # =================================================
 st.title("🧠 Cash-Flow Early Warning System for SMEs")
 # UPDATED LINE AS REQUESTED
@@ -85,7 +85,7 @@ if uploaded_file:
         df = load_transactions(uploaded_file)
         df.columns = [str(c).lower().strip() for c in df.columns]
 
-        # Aggressive Number Cleaning Logic
+        # Aggressive Number Cleaning Logic (Prevents 'str' math errors)
         def clean_val(val):
             if pd.isna(val) or val == "": return 0.0
             cleaned = re.sub(r'[^\d.-]', '', str(val))
