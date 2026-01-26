@@ -170,14 +170,68 @@ if uploaded_file:
         for a in actions:
             st.markdown(f"- {a}")
 
-        # --------------------------------------------------
-        # Expense Category Breakdown
-        # --------------------------------------------------
-        st.divider()
-        st.header("📉 Expense category breakdown")
+       # --------------------------------------------------
+# Expense Category Breakdown – Pie + Risk Analysis
+# --------------------------------------------------
+st.divider()
+st.header("📉 Expense category breakdown")
 
-        for cat, amt in expenses.items():
-            st.markdown(f"- **{cat.title()}**: ₹{amt:,.0f}")
+if not expenses.empty:
+    expense_df = expenses.reset_index()
+    expense_df.columns = ["Category", "Amount"]
 
-    except Exception as e:
-        st.error(f"Error processing file: {e}")
+    total_expense = expense_df["Amount"].sum()
+
+    # -----------------------------
+    # Pie chart (expense share)
+    # -----------------------------
+    st.subheader("Expense share")
+
+    st.pyplot(
+        expense_df.set_index("Category")
+        .plot.pie(
+            y="Amount",
+            figsize=(6, 6),
+            autopct=lambda p: f"{p:.1f}%",
+            legend=False
+        ).figure
+    )
+
+    # -----------------------------
+    # Top 2 cost drivers
+    # -----------------------------
+    st.subheader("Top cost drivers")
+
+    top_costs = expense_df.sort_values("Amount", ascending=False).head(2)
+
+    for _, row in top_costs.iterrows():
+        share = (row["Amount"] / total_expense) * 100
+        st.markdown(
+            f"- **{row['Category'].title()}**: ₹{row['Amount']:,.0f} "
+            f"({share:.1f}% of total expenses)"
+        )
+
+    # -----------------------------
+    # Cost concentration risk
+    # -----------------------------
+    top_share = (top_costs.iloc[0]["Amount"] / total_expense) * 100
+
+    st.subheader("⚠️ Cost concentration risk")
+
+    if top_share > 50:
+        st.error(
+            f"High risk: **{top_costs.iloc[0]['Category'].title()}** alone accounts for "
+            f"{top_share:.1f}% of total expenses. Cash flow is highly dependent on this cost."
+        )
+    elif top_share > 35:
+        st.warning(
+            f"Moderate risk: **{top_costs.iloc[0]['Category'].title()}** contributes "
+            f"{top_share:.1f}% of expenses. Monitor closely."
+        )
+    else:
+        st.success(
+            "Healthy cost distribution. No single expense dominates cash outflows."
+        )
+
+else:
+    st.info("No expense data available.")
