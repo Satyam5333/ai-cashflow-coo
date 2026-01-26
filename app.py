@@ -23,6 +23,9 @@ st.markdown("""
     }
     .kpi-title { font-size: 0.85rem; color: #6b7280; font-weight: 600; text-transform: uppercase; }
     .kpi-value { font-size: 1.8rem; font-weight: 700; margin-top: 0.5rem; }
+    .risk-box {
+        padding: 1rem; border-radius: 10px; background-color: #fff5f5; border: 1px solid #feb2b2; color: #c53030;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -38,6 +41,8 @@ st.markdown("""
 - **Categorizes** spending into Ads, Salary, and Rent heuristics
 - **Forecasts** cash position for the next 60 days
 """)
+
+st.markdown("---")
 
 # =================================================
 # 📥 SAMPLE CSV DOWNLOAD
@@ -118,6 +123,30 @@ if uploaded_file:
             st.plotly_chart(px.pie(cat_df, values='amount', names='Category', hole=0.4), use_container_width=True)
         with col_table:
             st.table(cat_df.sort_values(by="amount", ascending=False))
+
+        # NEW: 🚀 TOP 2 COST DRIVERS & CONCENTRATION RISK
+        st.divider()
+        st.subheader("⚠️ COO Risk Insights")
+        top_drivers = cat_df.sort_values(by="amount", ascending=False).head(2)
+        
+        col_risk_1, col_risk_2 = st.columns(2)
+        with col_risk_1:
+            st.write("**Top 2 Cost Drivers:**")
+            for idx, row in top_drivers.iterrows():
+                st.write(f"🔹 {row['Category']}: ₹{row['amount']:,.0f}")
+        
+        with col_risk_2:
+            total_expense = cat_df['amount'].sum()
+            primary_driver_pct = (top_drivers.iloc[0]['amount'] / total_expense) * 100
+            if primary_driver_pct > 50:
+                st.markdown(f"""
+                <div class='risk-box'>
+                    <strong>Cost Concentration Risk:</strong> {top_drivers.iloc[0]['Category']} accounts for 
+                    {primary_driver_pct:.1f}% of your total spend. Any disruption here is fatal.
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.write("✅ **Cost Dispersion:** Your expenses are diversified across categories.")
 
         # 5. 60-DAY FORECAST
         st.divider()
