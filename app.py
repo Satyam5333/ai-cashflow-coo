@@ -39,11 +39,11 @@ st.markdown("""
 # ---------------- HEADER (PRESERVED) ----------------
 # =================================================
 st.title("🧠 Cash-Flow Early Warning System for SMEs")
-st.subheader("Know when your business may face cash trouble — and what to do next.")
+st.subheader("Compatible with Bank PDFs, Tally, and Shopify Exports")
 
 st.markdown("""
 ### What this tool does
-- **Analyzes** real transaction data from Bank, Tally, or Shopify
+- **Analyzes** real transaction data from Bank (PDF), Tally, or Shopify
 - **Categorizes** spending into Ads, Salary, and Rent heuristics
 - **Forecasts** cash position for the next 60 days
 - **Generates** Founder Action Plans & Investor Reports
@@ -71,25 +71,30 @@ cod_delay = st.sidebar.slider("Avg COD Payment Delay (Days)", 0, 30, 7)
 forecast_horizon = st.sidebar.slider("Forecast Look-ahead (Days)", 30, 90, 60)
 
 # =================================================
-# MAIN LOGIC (PRESERVED FLOW)
+# MAIN LOGIC (PRESERVED FLOW + SMART NORMALIZER)
 # =================================================
 uploaded_file = st.file_uploader("Upload Data (CSV, Excel, or PDF)", type=["csv", "xlsx", "xls", "pdf"])
 
 if uploaded_file:
     try:
-        # 1. LOAD DATA & SMART ADAPTER (FIXES THE 'DATE' ERROR)
+        # 1. LOAD DATA & SMART ADAPTER (FIXES THE 'DATE' ERROR & PDF SUPPORT)
         df = load_transactions(uploaded_file)
         
         # Force all column names to lowercase and strip spaces to match internal engine logic
-        df.columns = [c.lower().strip() for c in df.columns]
+        df.columns = [str(c).lower().strip() for c in df.columns]
 
         # Handle the Debit/Credit columns found in your screenshot
         if 'debit' in df.columns and 'credit' in df.columns:
-            df['amount'] = df['credit'].fillna(0) - df['debit'].fillna(0)
+            # Numeric conversion to prevent calculation errors on PDF data
+            df['credit'] = pd.to_numeric(df['credit'], errors='coerce').fillna(0)
+            df['debit'] = pd.to_numeric(df['debit'], errors='coerce').fillna(0)
+            df['amount'] = df['credit'] - df['debit']
         
-        # Map "Activity" column to "Description" if necessary
+        # Map "Activity" or "Particulars" column to "Description" if necessary
         if 'activity' in df.columns:
             df = df.rename(columns={'activity': 'description'})
+        elif 'particulars' in df.columns:
+            df = df.rename(columns={'particulars': 'description'})
 
         # Smart Sign Correction Layer (Internal Heuristic)
         def reconcile_signs(row):
@@ -154,7 +159,7 @@ if uploaded_file:
         # 7. STRATEGIC Q&A (PRESERVED)
         st.divider()
         st.subheader("🔍 Deep-Dive Analysis")
-        q = st.text_input("Ask about your Tally/Bank records (e.g. 'total rent' or 'highest expense')")
+        q = st.text_input("Ask about your Tally/Bank/PDF records (e.g. 'total rent')")
         if q:
             query = q.lower()
             if "rent" in query:
@@ -199,4 +204,4 @@ if uploaded_file:
     except Exception as e:
         st.error(f"Analysis Error: {e}. Ensure column names match 'Date', 'Debit', 'Credit'.")
 else:
-    st.info("👋 Upload data to begin.")
+    st.info("👋 Upload data (PDF, CSV, or Excel) to begin.")

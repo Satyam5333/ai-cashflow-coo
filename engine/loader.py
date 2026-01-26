@@ -1,26 +1,42 @@
 import pandas as pd
+import pdfplumber
+import io
 
 def load_transactions(uploaded_file):
-    """Standardizes Tally/Bank data with Debit/Credit columns."""
-    if uploaded_file.name.endswith('.csv'):
+    """Standardizes Data from CSV, Excel, or PDF Bank Statements."""
+    
+    # --- PDF HANDLING LOGIC ---
+    if uploaded_file.name.endswith('.pdf'):
+        all_data = []
+        with pdfplumber.open(uploaded_file) as pdf:
+            for page in pdf.pages:
+                table = page.extract_table()
+                if table:
+                    all_data.extend(table)
+        
+        # Convert extracted list to DataFrame
+        df = pd.DataFrame(all_data[1:], columns=all_data[0])
+    
+    # --- CSV/EXCEL HANDLING ---
+    elif uploaded_file.name.endswith('.csv'):
         df = pd.read_csv(uploaded_file)
     else:
         df = pd.read_excel(uploaded_file)
 
-    # Standardize all column names to lowercase to fix the 'date' vs 'Date' error
-    df.columns = [c.lower().strip() for c in df.columns]
+    # --- SMART NORMALIZATION ---
+    # Standardize all column names to lowercase to fix the 'Date' error
+    df.columns = [str(c).lower().strip() for c in df.columns]
 
-    # Map 'activity' to 'description' as seen in your screenshot
-    if 'activity' in df.columns:
-        df = df.rename(columns={'activity': 'description'})
-
-    # CRITICAL FIX: Handle separate Debit and Credit columns
+    # Handle Debit/Credit columns
     if 'debit' in df.columns and 'credit' in df.columns:
-        # Fill empty cells with 0 and calculate net amount
-        # Credits increase cash (+), Debits decrease cash (-)
-        df['amount'] = df['credit'].fillna(0) - df['debit'].fillna(0)
+        df['amount'] = pd.to_numeric(df['credit'], errors='coerce').fillna(0) - \
+                       pd.to_numeric(df['debit'], errors='coerce').fillna(0)
     
-    # Ensure date column is recognized as a date
+    # Map 'activity' or 'particulars' to 'description'
+    rename_map = {'activity': 'description', 'particulars': 'description', 'narration': 'description'}
+    df = df.rename(columns=rename_map)
+    
+    # Clean Date
     if 'date' in df.columns:
         df['date'] = pd.to_datetime(df['date'], dayfirst=True, errors='coerce')
     
