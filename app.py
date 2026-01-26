@@ -39,11 +39,11 @@ st.markdown("""
 # ---------------- HEADER ----------------
 # =================================================
 st.title("🧠 Cash-Flow Early Warning System for SMEs")
-st.subheader("Compatible with Bank PDFs, Tally, and Shopify Exports")
+st.subheader("Compatible with ICICI, Axis, Tally, and Shopify Exports")
 
 st.markdown("""
 ### What this tool does
-- **Analyzes** real transaction data from Bank (PDF), Tally, or Shopify
+- **Multi-Bank Support:** Automatically detects ICICI (Amount/Type) and Axis (Withdrawals/Deposits)
 - **Categorizes** spending into Ads, Salary, and Rent heuristics
 - **Forecasts** cash position for the next 60 days
 - **Generates** Founder Action Plans & Investor Reports
@@ -57,7 +57,6 @@ sample_data = """Date,Debit,Credit,Activity
 31/12/2025,45000,,Meta Ads - Facebook/Insta
 30/12/2025,12000,,Office Rent
 28/12/2025,25000,,Staff Salary
-18/12/2025,8000,,Customer Refund
 """
 st.download_button("📥 Download Compatible Sample CSV", data=sample_data, file_name="sample_coo_data.csv", mime="text/csv")
 st.markdown("---")
@@ -77,35 +76,32 @@ uploaded_file = st.file_uploader("Upload Data (CSV, Excel, or PDF)", type=["csv"
 
 if uploaded_file:
     try:
-        # 1. LOAD DATA & SMART NORMALIZER (Fixes 'date' and 'Debit/Credit' mismatch)
+        # 1. LOAD DATA & SMART ADAPTER
         df = load_transactions(uploaded_file)
         df.columns = [str(c).lower().strip() for c in df.columns]
 
-        # Handle Debit/Credit logic for PDFs and Tally files
-        if 'debit' in df.columns and 'credit' in df.columns:
-            df['credit'] = pd.to_numeric(df['credit'], errors='coerce').fillna(0)
-            df['debit'] = pd.to_numeric(df['debit'], errors='coerce').fillna(0)
+        # --- AXIS BANK PARSER ---
+        if 'withdrawals' in df.columns and 'deposits' in df.columns:
+            df['credit'] = pd.to_numeric(df['deposits'], errors='coerce').fillna(0)
+            df['debit'] = pd.to_numeric(df['withdrawals'], errors='coerce').fillna(0)
             df['amount'] = df['credit'] - df['debit']
         
-        # Handle 'Amount' and 'Type' columns (e.g., ICICI Bank PDFs)
-        if 'amount' in df.columns and 'type' in df.columns:
+        # --- ICICI BANK PARSER ---
+        elif 'amount' in df.columns and 'type' in df.columns:
             df['amount'] = pd.to_numeric(df['amount'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
             df['amount'] = df.apply(lambda x: -abs(x['amount']) if str(x['type']).upper() == 'DR' else abs(x['amount']), axis=1)
 
-        # Map Activity or Particulars to Description
-        if 'activity' in df.columns:
-            df = df.rename(columns={'activity': 'description'})
-        elif 'particulars' in df.columns:
-            df = df.rename(columns={'particulars': 'description'})
+        # Standardize Description
+        if 'txn date' in df.columns: df = df.rename(columns={'txn date': 'date'})
+        if 'activity' in df.columns: df = df.rename(columns={'activity': 'description'})
+        elif 'transaction' in df.columns: df = df.rename(columns={'transaction': 'description'})
 
-        # Smart Sign Correction Layer
+        # Smart Sign Correction
         def reconcile_signs(row):
             desc = str(row['description']).lower()
             val = abs(row['amount'])
             if any(k in desc for k in ["ad", "facebook", "meta", "google", "rent", "salary", "refund"]):
                 return -val
-            if any(k in desc for k in ["payout", "sale", "deposit", "credit"]):
-                return val
             return row['amount']
         
         df['amount'] = df.apply(reconcile_signs, axis=1)
@@ -121,17 +117,7 @@ if uploaded_file:
         with c3: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Ad Spend %</div><div class='kpi-value'>{metrics.get('ad_spend_pct', 0)*100:.1f}%</div></div>", unsafe_allow_html=True)
         with c4: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Returns</div><div class='kpi-value'>{metrics.get('return_rate', 0)*100:.1f}%</div></div>", unsafe_allow_html=True)
 
-        # 4. CASH-OUT PREDICTION
-        st.divider()
-        cash_out_str = "Sustainable"
-        if metrics['runway_months'] < 99:
-            cash_out_date = (datetime.now() + timedelta(days=int(metrics['runway_months'] * 30)))
-            cash_out_str = cash_out_date.strftime('%d %b %Y')
-            st.error(f"⚠️ **Estimated Cash-out Date: {cash_out_str}**")
-        else:
-            st.success("✅ **Sustainable Growth Projected**")
-
-        # 5. SPEND ANALYSIS (Restored Pie + Table)
+        # 4. SPEND ANALYSIS (PIE + TABLE)
         st.divider()
         st.subheader("📊 Spend Analysis")
         def categorize(desc):
@@ -150,7 +136,7 @@ if uploaded_file:
             st.write("### Expense Details")
             st.table(cat_df.sort_values(by="amount", ascending=False))
 
-        # 6. FORECAST CHART
+        # 5. FORECAST CHART
         st.divider()
         st.subheader(f"📉 {forecast_horizon}-Day Cash Forecast")
         f_df = forecast_cashflow(cash_today=cash_now, start_date=df["date"].max(), days=forecast_horizon,
@@ -158,7 +144,7 @@ if uploaded_file:
                                avg_daily_fixed_cost=metrics.get("avg_daily_fixed_cost", 0), cod_delay_days=cod_delay, return_rate=metrics.get("return_rate", 0))
         st.plotly_chart(px.line(f_df, x="date", y="closing_cash", title="Liquidity Position"), use_container_width=True)
 
-        # 7. STRATEGIC Q&A
+        # 6. STRATEGIC Q&A
         st.divider()
         st.subheader("🔍 Deep-Dive Analysis")
         q = st.text_input("Ask about your Tally/Bank/PDF records (e.g. 'total rent')")
@@ -167,11 +153,8 @@ if uploaded_file:
             if "rent" in query:
                 val = df[df['description'].str.contains('rent', case=False, na=False)]['amount'].abs().sum()
                 st.write(f"📊 **Audit Result:** Total Rent found is ₹{val:,.0f}")
-            elif "highest" in query:
-                top = df.sort_values(by='amount').iloc[0]
-                st.write(f"🚩 **Top Expense:** {top['description']} (₹{abs(top['amount']):,.0f})")
 
-        # 8. FOUNDER ACTION PLAN (PAID-FEEL)
+        # 7. FOUNDER ACTION PLAN (PAID-FEEL)
         st.divider()
         st.subheader("📋 Executive Strategic Action Plan")
         st.markdown("<div class='paid-plan'>", unsafe_allow_html=True)
@@ -184,26 +167,22 @@ if uploaded_file:
         with col_pb:
             st.markdown("### Decision Confidence")
             st.markdown("<div class='confidence-score'>85%</div>", unsafe_allow_html=True)
-            st.markdown(f"<span class='warning-text'>Target Survival: {cash_out_str}</span>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # 9. INVESTOR PDF GENERATOR
+        # 8. INVESTOR PDF & ADVICE
         st.divider()
         def generate_pdf():
             buf = BytesIO()
             with PdfPages(buf) as pdf:
                 fig = plt.figure(figsize=(8.5, 11)); plt.axis("off")
-                txt = f"CASH REPORT\nCash: ₹{cash_now:,.0f}\nRunway: {metrics['runway_months']} Mo\n\n{cat_df.to_string(index=False)}"
+                txt = f"CASH REPORT\nCash: ₹{cash_now:,.0f}\nRunway: {metrics['runway_months']} Mo"
                 plt.text(0.1, 0.95, txt, fontsize=10, family='monospace', va='top')
                 pdf.savefig(fig); plt.close(fig)
             buf.seek(0); return buf
         st.download_button("📥 Download Investor PDF", data=generate_pdf(), file_name="COO_Report.pdf", mime="application/pdf")
-
-        # 10. AI ADVICE
-        st.divider()
         st.info(generate_coo_advice(cash_now, metrics['runway_months'], metrics.get('ad_spend_pct', 0), metrics.get('return_rate', 0), generate_decisions(metrics)))
 
     except Exception as e:
-        st.error(f"Analysis Error: {e}. Ensure column names match 'Date', 'Debit', 'Credit'.")
+        st.error(f"Analysis Error: {e}. Check if column names match Axis/ICICI standard formats.")
 else:
     st.info("👋 Upload data (PDF, CSV, or Excel) to begin.")
