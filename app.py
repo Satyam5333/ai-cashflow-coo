@@ -131,6 +131,41 @@ if uploaded_file.name.lower().endswith(".csv"):
     df = pd.read_csv(uploaded_file)
 else:
     df = pd.read_excel(uploaded_file)
+# =================================================
+# UNIVERSAL NORMALIZATION LAYER (ADD-ONLY)
+# =================================================
+
+# --- Detect date column
+if "date" not in df.columns:
+    for c in df.columns:
+        if "date" in c:
+            df["date"] = df[c]
+            break
+
+# --- Detect description column
+if "description" not in df.columns:
+    for c in ["activity", "narration", "comment", "remarks", "particulars"]:
+        if c in df.columns:
+            df["description"] = df[c]
+            break
+
+if "description" not in df.columns:
+    df["description"] = "Transaction"
+
+# --- Detect / build amount column
+if "amount" not in df.columns:
+    debit_col = next((c for c in df.columns if "debit" in c), None)
+    credit_col = next((c for c in df.columns if "credit" in c), None)
+
+    if debit_col or credit_col:
+        df[debit_col] = pd.to_numeric(df.get(debit_col, 0), errors="coerce").fillna(0)
+        df[credit_col] = pd.to_numeric(df.get(credit_col, 0), errors="coerce").fillna(0)
+        df["amount"] = df[credit_col] - df[debit_col]
+
+# --- Final cleanup
+df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
+df["date"] = pd.to_datetime(df["date"], errors="coerce")
+df = df.dropna(subset=["date", "amount"])
 
 df.columns = [c.lower().strip() for c in df.columns]
 
