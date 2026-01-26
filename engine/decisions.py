@@ -1,45 +1,26 @@
-def evaluate_coo_decisions(
-    cash_today: float,
-    avg_daily_burn: float,
-    runway_days,
-    ad_spend_pct: float,
-    return_rate: float
-) -> dict:
-    """
-    Applies COO decision rules and returns risks & actions
-    """
+def generate_decisions(metrics):
+    risks = []
+    actions = []
 
-    decisions = {
-        "runway_risk": "Safe",
-        "ad_spend_risk": "OK",
-        "returns_risk": "OK",
-        "scale_ready": "No",
-        "actions": []
-    }
+    # Ad spend risk
+    if metrics.get("ad_spend_pct", 0) > 0.4:
+        risks.append("High ad spend compared to sales")
+        actions.append("Pause low-ROI ad campaigns and optimise creatives")
 
     # Runway risk
-    if runway_days != "Cash Positive" and runway_days < 30:
-        decisions["runway_risk"] = "Danger"
-        decisions["actions"].append(
-            "Reduce ad spend and delay inventory purchases"
-        )
+    runway = metrics.get("runway_days")
 
-    # Ad spend efficiency
-    if ad_spend_pct > 0.35:
-        decisions["ad_spend_risk"] = "High Risk"
-        decisions["actions"].append(
-            "Pause low-ROI ad campaigns and improve creatives"
-        )
+    if runway != "Cash Positive" and isinstance(runway, int) and runway < 30:
+        risks.append("Low cash runway")
+        actions.append("Reduce discretionary costs and delay non-essential spends")
 
-    # Returns risk
-    if return_rate > 0.20:
-        decisions["returns_risk"] = "High"
-        decisions["actions"].append(
-            "Review product quality, packaging, and delivery issues"
-        )
+    return {
+        "cash_today": metrics.get("cash_today", 0),
+        "runway_days": metrics.get("runway_days", "Unknown"),
+        "ad_spend_pct": metrics.get("ad_spend_pct", 0),
+        "return_rate": metrics.get("return_rate", 0),
 
-    # Scale readiness
-    if avg_daily_burn < 0:
-        decisions["scale_ready"] = "Yes"
-
-    return decisions
+        # ✅ THESE MUST ALWAYS EXIST
+        "risks": risks,
+        "actions": actions,
+    }
