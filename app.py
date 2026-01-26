@@ -134,3 +134,15 @@ Customer returns account for **{metrics['return_rate']:.1f}% of revenue**.
     except Exception as e:
         st.error("Error processing file")
         st.code(str(e))
+st.subheader("📉 Expense category breakdown")
+
+expenses = metrics.get("expense_breakdown", [])
+
+if not expenses:
+    st.write("No expenses detected.")
+else:
+    for e in expenses:
+        st.write(
+            f"• **{e['category']}**: ₹{e['amount']:,} "
+            f"({e['percentage']}% of total expenses)"
+        )

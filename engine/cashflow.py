@@ -13,58 +13,66 @@ def calculate_cash_metrics(df: pd.DataFrame) -> dict:
     if "description" not in df.columns:
         df["description"] = ""
 
-    df["description"] = df["description"].astype(str)
+    df["description"] = df["description"].astype(str).str.lower()
 
     # -----------------------------
-    # AUTO CLASSIFICATION
+    # SALES / ADS / RETURNS
     # -----------------------------
+    sales = df[(df["amount"] > 0) & (df["type"] == "inflow")]["amount"].sum()
 
-    # Detect SALES (inflow + keywords)
-    sales_mask = (
-        (df["amount"] > 0) &
-        (df["description"].str.contains("sale|revenue|income", case=False, na=False)
-         | (df["type"] == "inflow"))
-    )
+    ad_spend = df[
+        df["description"].str.contains("ads|facebook|google|instagram|meta", na=False)
+    ]["amount"].abs().sum()
 
-    # Detect AD SPEND
-    ad_mask = df["description"].str.contains(
-        "ads|facebook|google|instagram|meta",
-        case=False,
-        na=False
-    )
-
-    # Detect RETURNS
-    return_mask = df["description"].str.contains(
-        "refund|return",
-        case=False,
-        na=False
-    )
-
-    # -----------------------------
-    # METRICS
-    # -----------------------------
+    returns = df[
+        df["description"].str.contains("refund|return", na=False)
+    ]["amount"].abs().sum()
 
     cash_today = df["amount"].sum()
 
-    sales = df.loc[sales_mask, "amount"].sum()
-    ad_spend = df.loc[ad_mask, "amount"].abs().sum()
-    returns = df.loc[return_mask, "amount"].abs().sum()
+    burn = df[df["amount"] < 0].groupby(df["date"].dt.date)["amount"].sum().mean()
+    runway = "Cash Positive" if burn >= 0 or pd.isna(burn) else round(abs(cash_today / burn))
 
-    burn_df = df[df["amount"] < 0]
-    avg_daily_burn = burn_df.groupby(df["date"].dt.date)["amount"].sum().mean()
+    # -----------------------------
+    # EXPENSE CATEGORY BREAKDOWN
+    # -----------------------------
+    expense_df = df[df["amount"] < 0].copy()
 
-    runway = (
-        "Cash Positive"
-        if avg_daily_burn >= 0 or pd.isna(avg_daily_burn)
-        else round(abs(cash_today / avg_daily_burn))
+    def classify_expense(desc):
+        if any(x in desc for x in ["ads", "facebook", "google", "meta"]):
+            return "Advertising"
+        if any(x in desc for x in ["salary", "wages", "payroll"]):
+            return "Salaries"
+        if any(x in desc for x in ["rent", "office", "lease"]):
+            return "Rent"
+        if any(x in desc for x in ["software", "saas", "tool"]):
+            return "Software"
+        return "Other"
+
+    expense_df["category"] = expense_df["description"].apply(classify_expense)
+
+    expense_summary = (
+        expense_df.groupby("category")["amount"]
+        .sum()
+        .abs()
+        .sort_values(ascending=False)
     )
 
-    ad_spend_pct = round((ad_spend / sales) * 100, 1) if sales > 0 else 0.0
-    return_rate = round((returns / sales) * 100, 1) if sales > 0 else 0.0
+    total_expense = expense_summary.sum()
+
+    expense_breakdown = []
+    for cat, amt in expense_summary.items():
+        pct = round((amt / total_expense) * 100, 1) if total_expense > 0 else 0
+        expense_breakdown.append({
+            "category": cat,
+            "amount": round(amt, 2),
+            "percentage": pct
+        })
 
     return {
         "cash_today": round(cash_today, 2),
         "runway_days": runway,
-        "ad_spend_pct": ad_spend_pct,
-        "return_rate": return_rate,
+        "ad_spend_pct": round((ad_spend / sales) * 100, 1) if sales > 0 else 0.0,
+        "return_rate": round((returns / sales) * 100, 1) if sales > 0 else 0.0,
+        "expense_breakdown": expense_breakdown
     }
