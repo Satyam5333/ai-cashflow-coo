@@ -1,148 +1,145 @@
 import streamlit as st
 import pandas as pd
 
-from engine.loader import load_transactions
-from engine.cashflow import calculate_cash_metrics
-from engine.decisions import generate_decisions
-
-# -----------------------
+# ----------------------------
 # Page config
-# -----------------------
+# ----------------------------
 st.set_page_config(
-    page_title="AI Cash-Flow COO",
+    page_title="Cash-Flow Early Warning System",
     page_icon="🧠",
     layout="centered"
 )
 
-# -----------------------
-# Header
-# -----------------------
+# ----------------------------
+# Title
+# ----------------------------
 st.markdown("## 🧠 Cash-Flow Early Warning System for SMEs")
-
 st.markdown(
-    """
-Know when your business may face cash trouble — **and what to do next.**
-
-**No dashboards. No jargon. Just decisions.**
-"""
+    "Know when your business may face cash trouble — **and what to do next.**"
 )
 
 st.divider()
 
-# -----------------------
+# ----------------------------
 # What this tool does
-# -----------------------
+# ----------------------------
 st.markdown("### What this tool does")
-
 st.markdown(
     """
-This system acts like a **virtual COO** for your business:
-
-- Analyzes real transaction-level cash movements  
-- Forecasts your cash position for the next **60 days**  
-- Detects overspending and hidden cash risks  
-- Produces **clear, business-first recommendations**
+- Analyzes real transaction data  
+- Forecasts cash position for the next **60 days**  
+- Flags overspending and cash risks  
+- Gives **clear, COO-level recommendations**
 """
 )
 
 st.divider()
 
-# -----------------------
-# Upload section
-# -----------------------
-st.markdown("### Upload your transactions CSV (bank / accounting / POS export)")
-
+# ----------------------------
+# File upload
+# ----------------------------
 uploaded_file = st.file_uploader(
-    "",
-    type=["csv"],
-    help="CSV must contain date, amount, and type columns"
+    "Upload your transactions CSV (bank / accounting / POS export)",
+    type=["csv"]
 )
 
-# -----------------------
-# Sample CSV (ONLY below upload)
-# -----------------------
-with st.expander("📥 Download sample CSV format"):
-    sample_csv = """date,amount,type
-2024-01-01,42000,sales
-2024-01-02,-15000,ad_spend
-2024-01-03,-8000,fixed_cost
-2024-01-04,38000,sales
-2024-01-05,-12000,ad_spend
-"""
-    st.download_button(
-        label="Download sample transactions CSV",
-        data=sample_csv,
-        file_name="sample_transactions.csv",
-        mime="text/csv"
+# ----------------------------
+# CSV format help (SAFE)
+# ----------------------------
+with st.expander("📄 Required CSV format"):
+    st.markdown("**Your CSV must contain these columns:**")
+    st.markdown("- `date` → YYYY-MM-DD")
+    st.markdown("- `amount` → positive = inflow, negative = outflow")
+    st.markdown("- `type` → Inflow / Outflow")
+    st.markdown("- `description` → Sales, Facebook Ads, Salary, Rent")
+
+    st.markdown("**Example:**")
+    st.code(
+        "date,amount,type,description\n"
+        "2025-01-01,42000,Inflow,Sales\n"
+        "2025-01-02,-15000,Outflow,Facebook Ads\n"
+        "2025-01-03,-8000,Outflow,Salary",
+        language="text"
     )
 
-# -----------------------
-# Processing logic
-# -----------------------
+# ----------------------------
+# Main logic
+# ----------------------------
 if uploaded_file:
     try:
-        df = load_transactions(uploaded_file)
-        metrics = calculate_cash_metrics(df)
-        decisions = generate_decisions(metrics)
+        df = pd.read_csv(uploaded_file)
+
+        required = {"date", "amount", "type", "description"}
+        if not required.issubset(df.columns):
+            st.error("CSV columns do not match required format.")
+            st.stop()
+
+        df["date"] = pd.to_datetime(df["date"])
+        df["amount"] = pd.to_numeric(df["amount"])
+
+        inflow = df[df["amount"] > 0]["amount"].sum()
+        outflow = df[df["amount"] < 0]["amount"].sum()
+        cash_today = inflow + outflow
+
+        days = max((df["date"].max() - df["date"].min()).days, 1)
+        burn = abs(outflow) / days if outflow < 0 else 0
+        runway = int(cash_today / burn) if burn > 0 else "Cash positive"
+
+        # Advertising spend detection
+        ads_mask = df["description"].str.contains(
+            "ad|ads|facebook|google|marketing",
+            case=False,
+            na=False
+        )
+        ad_spend = abs(df.loc[ads_mask & (df["amount"] < 0), "amount"].sum())
+        ad_pct = (ad_spend / inflow * 100) if inflow > 0 else 0
+
+        # Expense breakdown
+        expense_df = df[df["amount"] < 0].copy()
+
+        def categorize(desc):
+            d = desc.lower()
+            if "ad" in d or "facebook" in d or "google" in d:
+                return "Advertising"
+            if "salary" in d:
+                return "Salary"
+            if "rent" in d:
+                return "Rent"
+            return "Other"
+
+        expense_df["category"] = expense_df["description"].apply(categorize)
+        breakdown = expense_df.groupby("category")["amount"].sum().abs()
+
+        # ----------------------------
+        # Output
+        # ----------------------------
+        st.divider()
+        st.markdown("## 📊 AI COO Summary")
+
+        st.markdown(f"**Cash today:** ₹{cash_today:,.0f}")
+        st.markdown(f"**Runway:** {runway} days")
+        st.markdown(f"**Advertising spend:** {ad_pct:.1f}% of sales")
 
         st.divider()
-
-        # -----------------------
-        # COO Summary (DETAILED, NOT METRIC DUMP)
-        # -----------------------
-        st.markdown("## 📊 COO Summary")
-
-        st.markdown(
-            f"""
-**Current cash position**
-
-You currently have **₹{metrics['cash_today']:,.0f}** available.
-
-At the present burn rate, your business has approximately  
-**{metrics['runway_days']} days of cash runway**, assuming no major changes.
-
-**Spending behaviour**
-
-Advertising spend represents **{metrics['ad_spend_pct']:.1f}% of sales**.  
-Customer returns account for **{metrics['return_rate']:.1f}% of revenue**.
-
-"""
-        )
-
-        # -----------------------
-        # Risks
-        # -----------------------
-        st.markdown("## ⚠️ Key risks")
-
-        if decisions["risks"]:
-            for r in decisions["risks"]:
-                st.markdown(f"- {r}")
+        st.markdown("### ⚠️ Key risks")
+        if ad_pct > 30:
+            st.warning("Advertising spend is high relative to revenue.")
         else:
-            st.markdown("No immediate financial risks detected based on current data.")
+            st.success("No major financial risks detected.")
 
-        # -----------------------
-        # Actions
-        # -----------------------
-        st.markdown("## ✅ Recommended actions")
-
-        if decisions["actions"]:
-            for a in decisions["actions"]:
-                st.markdown(f"- {a}")
+        st.divider()
+        st.markdown("### ✅ Recommended actions")
+        if ad_pct > 30:
+            st.markdown("- Pause low-performing ad campaigns")
+            st.markdown("- Improve conversion before scaling spend")
         else:
-            st.markdown("No corrective action required at this time. Continue monitoring weekly.")
+            st.markdown("- Maintain current spending discipline")
+
+        st.divider()
+        st.markdown("### 📉 Expense category breakdown")
+        for cat, val in breakdown.items():
+            st.markdown(f"- **{cat}**: ₹{val:,.0f}")
 
     except Exception as e:
         st.error("Error processing file")
         st.code(str(e))
-st.subheader("📉 Expense category breakdown")
-
-expenses = metrics.get("expense_breakdown", [])
-
-if not expenses:
-    st.write("No expenses detected.")
-else:
-    for e in expenses:
-        st.write(
-            f"• **{e['category']}**: ₹{e['amount']:,} "
-            f"({e['percentage']}% of total expenses)"
-        )
