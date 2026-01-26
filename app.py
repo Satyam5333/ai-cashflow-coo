@@ -131,6 +131,8 @@ if uploaded_file.name.lower().endswith(".csv"):
     df = pd.read_csv(uploaded_file)
 else:
     df = pd.read_excel(uploaded_file)
+
+df.columns = [c.lower().strip() for c in df.columns]
 # =================================================
 # UNIVERSAL NORMALIZATION LAYER (ADD-ONLY)
 # =================================================
@@ -166,8 +168,6 @@ if "amount" not in df.columns:
 df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
 df = df.dropna(subset=["date", "amount"])
-
-df.columns = [c.lower().strip() for c in df.columns]
 
 required_cols = {"date", "amount", "description"}
 if not required_cols.issubset(df.columns):
