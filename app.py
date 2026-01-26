@@ -5,40 +5,41 @@ from matplotlib.backends.backend_pdf import PdfPages
 from datetime import timedelta
 from io import BytesIO
 
-# -----------------------------
-# Page config
-# -----------------------------
 st.set_page_config(page_title="AI Cash-Flow COO", layout="centered")
 
-# -----------------------------
+# -------------------------------------------------
 # Header
-# -----------------------------
+# -------------------------------------------------
 st.title("🧠 Cash-Flow Early Warning System for SMEs")
 st.write(
-    "Know when your business may face cash trouble — and **what to do next**.\n\n"
+    "Know when your business may face cash trouble — **and exactly what to do next**.\n\n"
     "**No dashboards. No jargon. Just decisions.**"
 )
 
 st.divider()
 
-# -----------------------------
+# -------------------------------------------------
 # What this tool does
-# -----------------------------
+# -------------------------------------------------
 st.subheader("What this tool does")
 st.markdown(
     """
-- Analyzes real transaction data  
-- Forecasts runway and cash-out date  
-- Detects cost concentration risk  
-- Answers **“What should I cut first?”**  
+This system acts like a **virtual COO focused purely on cash discipline**.
+
+It:
+- Reads your real transaction data  
+- Identifies what is actually driving cash burn  
+- Predicts how long your money will last  
+- Flags hidden structural risks  
+- Tells you **what to cut, what to protect, and what to fix first**
 """
 )
 
 st.divider()
 
-# -----------------------------
-# Sample CSV download
-# -----------------------------
+# -------------------------------------------------
+# Sample CSV
+# -------------------------------------------------
 sample_csv = """date,amount,type,description
 2025-01-01,42000,Inflow,Sales
 2025-01-02,-15000,Outflow,Facebook Ads
@@ -55,9 +56,9 @@ st.download_button(
 
 st.divider()
 
-# -----------------------------
+# -------------------------------------------------
 # Upload CSV
-# -----------------------------
+# -------------------------------------------------
 uploaded_file = st.file_uploader(
     "Upload your transactions CSV (bank / accounting / POS export)",
     type=["csv"]
@@ -76,9 +77,9 @@ if not required_cols.issubset(df.columns):
 df["date"] = pd.to_datetime(df["date"])
 df["amount"] = df["amount"].astype(float)
 
-# -----------------------------
-# Core metrics
-# -----------------------------
+# -------------------------------------------------
+# Core calculations
+# -------------------------------------------------
 cash_today = df["amount"].sum()
 inflows = df[df["amount"] > 0]["amount"].sum()
 
@@ -99,40 +100,76 @@ ads_mask = df["description"].str.contains(
 ad_spend = abs(df[ads_mask & (df["amount"] < 0)]["amount"].sum())
 ad_ratio = (ad_spend / inflows * 100) if inflows > 0 else 0
 
-# -----------------------------
-# AI COO Summary (DETAILED)
-# -----------------------------
-st.subheader("📊 AI COO Summary")
+# -------------------------------------------------
+# AI COO SUMMARY (DEEP)
+# -------------------------------------------------
+st.subheader("🧠 AI COO Analysis")
 
 st.markdown(
     f"""
-**Cash today:** ₹{cash_today:,.0f}  
-**Average daily burn:** ₹{daily_burn:,.0f}  
-**Runway:** ~{runway_days} days  
-**Estimated cash-out date:** **{cash_out_date.date()}**
+### Cash position
+You currently hold **₹{cash_today:,.0f}** in net cash.  
+Your average daily operating burn is **₹{daily_burn:,.0f}**, giving you approximately **{runway_days} days of runway**.
 
-**Advertising dependency:** {ad_ratio:.1f}% of revenue
+This places your **expected cash-out date around {cash_out_date.date()}**, assuming **no change** in spending or revenue patterns.
 """
 )
 
-if runway_days < 90:
-    st.warning("⚠️ Runway under 90 days. Immediate cost control required.")
+st.markdown(
+    f"""
+### Spending structure insight
+Advertising accounts for **{ad_ratio:.1f}% of total revenue**, making it the **single largest variable cost driver**.
 
-if ad_ratio > 30:
-    st.warning("⚠️ Heavy dependence on advertising. Revenue volatility risk.")
+This creates **cash volatility risk**:
+- Ad performance fluctuates faster than fixed costs
+- A short-term dip in ROI can compress runway quickly
+- Cash pressure may appear suddenly, not gradually
+"""
+)
+
+if ad_ratio > 40:
+    st.error(
+        "⚠️ Advertising dependency is critically high. A revenue slowdown would immediately threaten cash stability."
+    )
+elif ad_ratio > 25:
+    st.warning(
+        "⚠️ Advertising dependency is elevated. Spend should be actively capped and reviewed weekly."
+    )
+else:
+    st.success(
+        "Advertising spend is within a controllable range relative to revenue."
+    )
+
+st.markdown(
+    """
+### What should you cut first?
+If cash tightens, **do NOT cut core operations immediately**.
+
+**Priority order for cost control:**
+1. Cap or pause underperforming advertising channels  
+2. Reduce variable vendor expenses  
+3. Delay discretionary operating spend  
+
+Protect:
+- Salary for core staff  
+- Rent and operational continuity  
+
+This preserves execution capability while buying time.
+"""
+)
 
 st.divider()
 
-# -----------------------------
-# Expense breakdown (clean pie)
-# -----------------------------
+# -------------------------------------------------
+# Expense breakdown (clean, non-overlapping pie)
+# -------------------------------------------------
 st.subheader("📉 Expense category breakdown")
 
 expense_df = df[df["amount"] < 0].copy()
 expense_df["abs"] = expense_df["amount"].abs()
 
-def map_category(d):
-    d = d.lower()
+def map_category(desc):
+    d = desc.lower()
     if "ad" in d:
         return "Advertising"
     if "salary" in d:
@@ -144,27 +181,29 @@ def map_category(d):
 expense_df["category"] = expense_df["description"].apply(map_category)
 expense_breakdown = expense_df.groupby("category")["abs"].sum().sort_values(ascending=False)
 
-fig, ax = plt.subplots(figsize=(4, 4))
+fig, ax = plt.subplots(figsize=(3.5, 3.5))
 ax.pie(
     expense_breakdown.values,
     labels=expense_breakdown.index,
     autopct="%1.0f%%",
     startangle=90,
-    textprops={"fontsize": 9},
+    textprops={"fontsize": 8},
 )
 ax.axis("equal")
 st.pyplot(fig)
 
 top_two_share = expense_breakdown.iloc[:2].sum() / expense_breakdown.sum() * 100
 if top_two_share > 65:
-    st.warning(f"⚠️ Cost concentration risk: top 2 costs = {top_two_share:.0f}%")
+    st.warning(
+        f"⚠️ Cost concentration risk detected: top 2 categories = {top_two_share:.0f}% of total expenses."
+    )
 
 st.divider()
 
-# -----------------------------
-# Investor PDF (MATPLOTLIB SAFE)
-# -----------------------------
-st.subheader("📄 Investor-ready PDF")
+# -------------------------------------------------
+# INVESTOR PDF (DETAILED NARRATIVE)
+# -------------------------------------------------
+st.subheader("📄 Investor-ready cash narrative")
 
 def generate_pdf():
     buffer = BytesIO()
@@ -175,23 +214,28 @@ def generate_pdf():
         text = f"""
 CASH-FLOW INVESTOR SUMMARY
 
-Cash today: ₹{cash_today:,.0f}
-Daily burn: ₹{daily_burn:,.0f}
-Runway: ~{runway_days} days
-Cash-out date: {cash_out_date.date()}
+Current cash balance: ₹{cash_today:,.0f}
+Average daily burn: ₹{daily_burn:,.0f}
+Estimated runway: ~{runway_days} days
+Projected cash-out date: {cash_out_date.date()}
 
-Advertising spend: {ad_ratio:.1f}% of revenue
+STRUCTURAL INSIGHTS
+Advertising represents {ad_ratio:.1f}% of revenue, making cash flow sensitive to short-term performance swings.
+Cost concentration in top categories is {top_two_share:.0f}%, increasing downside risk if revenue slows.
 
-TOP RISKS:
-- Cost concentration risk: {top_two_share:.0f}%
-- Runway pressure if revenue dips
+RISK INTERPRETATION
+The business is solvent in the near term but exposed to variability in marketing efficiency.
+Runway remains healthy only if ad ROI is maintained.
 
-WHAT TO CUT FIRST:
-- Reduce {expense_breakdown.index[0]} before fixed costs
-- Pause low-ROI ad channels
-- Renegotiate variable vendors
+MANAGEMENT ACTION PLAN
+1. Cap advertising spend immediately and reallocate only to proven channels
+2. Introduce weekly cash review cadence
+3. Maintain fixed operational capacity while trimming variable costs
+4. Target extension of runway beyond 150 days before scaling spend
+
+This analysis reflects current data only and assumes no external financing.
 """
-        plt.text(0.01, 0.99, text, va="top", fontsize=11)
+        plt.text(0.02, 0.98, text, va="top", fontsize=11)
         pdf.savefig(fig)
         plt.close(fig)
 
