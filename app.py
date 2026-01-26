@@ -26,15 +26,14 @@ st.markdown("""
     }
     .kpi-title { font-size: 0.85rem; color: #6b7280; font-weight: 600; text-transform: uppercase; }
     .kpi-value { font-size: 1.8rem; font-weight: 700; margin-top: 0.5rem; }
-    .risk-box {
-        padding: 1rem; border-radius: 10px; background-color: #fff5f5; border: 1px solid #feb2b2; color: #c53030;
+    .paid-plan {
+        background-color: #f8fafc; padding: 2rem; border-radius: 15px; 
+        border: 2px solid #e2e8f0; border-left: 10px solid #1e293b;
     }
-    .decision-block {
-        padding: 1.2rem; border-radius: 12px; background-color: #f0fdf4; border: 1px solid #bbf7d0; color: #166534;
+    .confidence-score {
+        font-size: 2rem; font-weight: 800; color: #059669;
     }
-    .action-plan {
-        background-color: #f8fafc; padding: 1.5rem; border-radius: 15px; border: 1px solid #e2e8f0;
-    }
+    .warning-text { color: #dc2626; font-weight: 700; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -138,18 +137,7 @@ if uploaded_file:
         with col_table:
             st.table(cat_df.sort_values(by="amount", ascending=False))
 
-        # 4. DECISION BLOCK
-        st.divider()
-        st.subheader("🎯 What should I cut first?")
-        st.markdown("""
-        <div class='decision-block'>
-            <strong>Priority 1: Underperforming Ad Sets</strong> (ROAS < 1.5)<br>
-            <strong>Priority 2: Unused SaaS/Subscriptions</strong><br>
-            <strong>Priority 3: Return/RTO Reduction</strong>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # 5. FORECAST
+        # 4. FORECAST
         st.divider()
         st.subheader(f"📉 {forecast_horizon}-Day Cash Forecast")
         f_df = forecast_cashflow(
@@ -159,63 +147,54 @@ if uploaded_file:
         )
         st.plotly_chart(px.line(f_df, x="date", y="closing_cash", title="Liquidity Position"), use_container_width=True)
 
-        # NEW: 🚀 FOUNDER ACTION PLAN BLOCK
+        # NEW: 🏆 FOUNDER ACTION PLAN (PAID-FEEL)
         st.divider()
-        st.subheader("📋 Founder 30-Day Action Plan")
-        st.markdown("<div class='action-plan'>", unsafe_allow_html=True)
+        st.subheader("📋 Executive Strategic Action Plan")
+        st.markdown("<div class='paid-plan'>", unsafe_allow_html=True)
         
-        col_immed, col_strat = st.columns(2)
-        with col_immed:
-            st.markdown("### 🔴 Phase 1: Immediate (0-7 Days)")
-            st.markdown(f"- **Cash Audit:** Reconcile current bank balance of ₹{cash_now:,.0f} with pending COD payments.")
-            if metrics['ad_spend_pct'] > 0.4:
-                st.markdown("- **Marketing Kill-Switch:** Immediately pause Meta/Google campaigns with ROAS < 1.0 to preserve cash.")
-            st.markdown("- **Vendor Extension:** Contact top 2 suppliers to request a 7-day payment extension.")
+        col_plan_a, col_plan_b = st.columns([2, 1])
+        with col_plan_a:
+            st.markdown("### 🎯 Top 3 Actions (Next 30 Days)")
+            st.markdown(f"1. **Audit ROAS by Ad Set:** Target a ROAS > 1.8 to reduce your {metrics['ad_spend_pct']*100:.1f}% spend intensity.")
+            st.markdown(f"2. **Freeze Non-Core 'Other' Spending:** Your unclassified expenses total ₹{cat_df[cat_df['Category']=='Other']['amount'].sum() if not cat_df[cat_df['Category']=='Other'].empty else 0:,.0f}; cut this by 50% immediately.")
+            st.markdown(f"3. **COD Verification:** Implement RTO calling/IVR to lower the {metrics['return_rate']*100:.1f}% return rate before the next scale-up.")
+            
+            st.markdown("### 🛑 What NOT to do")
+            st.markdown("- **Do NOT** launch new SKUs or enter new markets until the cash-out date is pushed back at least 90 days.")
+            st.markdown("- **Do NOT** increase Meta/Google daily budget based on 'one good day' of sales.")
+        
+        with col_plan_b:
+            # Confidence Score Heuristic
+            confidence = 85 if len(df) > 20 else 60
+            st.markdown("### Decision Confidence")
+            st.markdown(f"<div class='confidence-score'>{confidence}%</div>", unsafe_allow_html=True)
+            st.write("Score based on data density and transaction history.")
+            
+            st.markdown("### 📉 The Cost of Inaction")
+            if metrics['runway_months'] < 99:
+                st.markdown(f"<span class='warning-text'>Failure to act will result in complete liquidity exhaustion by {cash_out_str}.</span>", unsafe_allow_html=True)
+            else:
+                st.markdown("<span class='warning-text'>Failure to act will reduce your current surplus and erode growth capital.</span>", unsafe_allow_html=True)
 
-        with col_strat:
-            st.markdown("### 🔵 Phase 2: Strategic (7-30 Days)")
-            st.markdown(f"- **Return Reduction:** Set up an automated RTO verification system for COD orders to lower your {metrics['return_rate']*100:.1f}% return rate.")
-            st.markdown("- **Fixed Cost Trim:** Review 'Other' expenses for SaaS recurring charges that can be moved to annual plans or cancelled.")
-            st.markdown("- **Inventory Check:** Liquidate slow-moving SKUs at a discount to boost immediate cash inflows.")
-        
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # 6. INVESTOR PDF GENERATOR
+        # 5. INVESTOR PDF
         st.divider()
-        st.subheader("📄 Investor-ready cash narrative")
-        
         def generate_investor_pdf():
             buffer = BytesIO()
             with PdfPages(buffer) as pdf:
                 fig = plt.figure(figsize=(8.5, 11))
                 plt.axis("off")
-                content = f"""
-CASH-FLOW STRATEGIC SUMMARY
-Generated: {datetime.now().strftime('%Y-%m-%d')}
-
-1. EXECUTIVE LIQUIDITY OVERVIEW
-- Current Cash Reserves: ₹{cash_now:,.0f}
-- Sustainable Runway: {metrics['runway_months']} Months
-- Estimated Solvency Date: {cash_out_str}
-
-2. OPERATIONAL EFFICIENCY
-- Ad Intensity: {metrics['ad_spend_pct']*100:.1f}%
-- Return Friction: {metrics['return_rate']*100:.1f}%
-
-3. AUDIT TRAIL:
-{cat_df.sort_values(by='amount', ascending=False).to_string(index=False)}
-                """
+                content = f"CASH-FLOW REPORT\nCash: ₹{cash_now:,.0f}\nRunway: {metrics['runway_months']} Mo\nCash-out: {cash_out_str}\n\nTop Expenses:\n{cat_df.to_string(index=False)}"
                 plt.text(0.1, 0.95, content, fontsize=11, family='monospace', va='top')
                 pdf.savefig(fig)
                 plt.close(fig)
             buffer.seek(0)
             return buffer
-
         st.download_button("📥 Download Investor PDF", data=generate_investor_pdf(), file_name="COO_Report.pdf", mime="application/pdf")
 
-        # 7. AI ADVICE
+        # 6. AI ADVICE
         st.divider()
-        st.subheader("🤖 Executive Strategy Report")
         advice_text = generate_coo_advice(cash_now, metrics['runway_months'], metrics['ad_spend_pct'], metrics['return_rate'], generate_decisions(metrics))
         st.info(advice_text)
         
