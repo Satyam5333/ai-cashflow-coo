@@ -30,9 +30,7 @@ st.markdown("""
         background-color: #f8fafc; padding: 2rem; border-radius: 15px; 
         border: 2px solid #e2e8f0; border-left: 10px solid #1e293b;
     }
-    .confidence-score {
-        font-size: 2rem; font-weight: 800; color: #059669;
-    }
+    .confidence-score { font-size: 2rem; font-weight: 800; color: #059669; }
     .warning-text { color: #dc2626; font-weight: 700; }
 </style>
 """, unsafe_allow_html=True)
@@ -45,7 +43,7 @@ st.subheader("Know when your business may face cash trouble — and what to do n
 
 st.markdown("""
 ### What this tool does
-- **Analyzes** real transaction data (Debit/Credit logic supported)
+- **Analyzes** Bank, Tally, or Accounting data (Debit/Credit logic supported)
 - **Categorizes** spending into Ads, Salary, and Rent heuristics
 - **Forecasts** cash position for the next 60 days
 - **Generates** Founder Action Plans & Investor Reports
@@ -61,8 +59,7 @@ sample_data = """Date,Debit,Credit,Activity
 28/12/2025,25000,,Staff Salary
 18/12/2025,8000,,Customer Refund
 """
-st.download_button("📥 Download Compatible Sample CSV", data=sample_data, file_name="compatible_sample.csv", mime="text/csv")
-
+st.download_button("📥 Download Compatible Sample CSV", data=sample_data, file_name="sample_coo_data.csv", mime="text/csv")
 st.markdown("---")
 
 # =================================================
@@ -80,11 +77,11 @@ uploaded_file = st.file_uploader("Upload Data (CSV, Excel, or PDF)", type=["csv"
 
 if uploaded_file:
     try:
-        # 1. LOAD DATA & SMART ADAPTER (FOR DEBIT/CREDIT FILES)
+        # 1. LOAD DATA & SMART ADAPTER
         df = load_transactions(uploaded_file)
         df.columns = [c.lower().strip() for c in df.columns]
 
-        # Handle Debit/Credit logic from your file screenshots
+        # Handle Debit/Credit logic for Bank/Tally files
         if 'debit' in df.columns and 'credit' in df.columns:
             df['amount'] = df['credit'].fillna(0) - df['debit'].fillna(0)
         
@@ -112,7 +109,7 @@ if uploaded_file:
         else:
             st.success("✅ **Sustainable Growth Projected**")
 
-        # 5. SPEND ANALYSIS (TABLE FORMAT RESTORED)
+        # 5. SPEND ANALYSIS (PIE + TABLE)
         st.divider()
         st.subheader("📊 Spend Analysis")
         def categorize(desc):
@@ -121,7 +118,6 @@ if uploaded_file:
             if any(x in d for x in ["salary", "wage"]): return "Salary"
             if any(x in d for x in ["rent", "office"]): return "Rent"
             return "Other"
-        
         df["Category"] = df["description"].apply(categorize)
         cat_df = df[df["amount"] < 0].groupby("Category")["amount"].sum().abs().reset_index()
         
@@ -132,48 +128,56 @@ if uploaded_file:
             st.write("### Expense Details")
             st.table(cat_df.sort_values(by="amount", ascending=False))
 
-        # 6. FORECAST
+        # 6. FORECAST CHART
         st.divider()
         st.subheader(f"📉 {forecast_horizon}-Day Cash Forecast")
-        f_df = forecast_cashflow(
-            cash_today=cash_now, start_date=df["date"].max(), days=forecast_horizon,
-            avg_daily_sales=metrics.get("avg_daily_sales", 0), avg_daily_ad_spend=metrics.get("avg_daily_ad_spend", 0), 
-            avg_daily_fixed_cost=metrics.get("avg_daily_fixed_cost", 0), cod_delay_days=cod_delay, return_rate=metrics.get("return_rate", 0)
-        )
+        f_df = forecast_cashflow(cash_today=cash_now, start_date=df["date"].max(), days=forecast_horizon,
+                               avg_daily_sales=metrics.get("avg_daily_sales", 0), avg_daily_ad_spend=metrics.get("avg_daily_ad_spend", 0), 
+                               avg_daily_fixed_cost=metrics.get("avg_daily_fixed_cost", 0), cod_delay_days=cod_delay, return_rate=metrics.get("return_rate", 0))
         st.plotly_chart(px.line(f_df, x="date", y="closing_cash", title="Liquidity Position"), use_container_width=True)
 
-        # 7. FOUNDER ACTION PLAN (PAID-FEEL)
+        # 7. STRATEGIC Q&A (HARDCORE RESTORED)
+        st.divider()
+        st.subheader("🔍 Deep-Dive Analysis")
+        q = st.text_input("Ask about your Tally/Bank records (e.g. 'total rent' or 'highest expense')")
+        if q:
+            query = q.lower()
+            if "rent" in query:
+                val = df[df['description'].str.contains('rent', case=False, na=False)]['amount'].abs().sum()
+                st.write(f"📊 **Audit Result:** Total Rent found is ₹{val:,.0f}")
+            elif "highest" in query:
+                top = df.sort_values(by='amount').iloc[0]
+                st.write(f"🚩 **Top Expense:** {top['description']} (₹{abs(top['amount']):,.0f})")
+
+        # 8. FOUNDER ACTION PLAN (PAID-FEEL)
         st.divider()
         st.subheader("📋 Executive Strategic Action Plan")
         st.markdown("<div class='paid-plan'>", unsafe_allow_html=True)
-        
-        col_plan_a, col_plan_b = st.columns([2, 1])
-        with col_plan_a:
+        col_pa, col_pb = st.columns([2, 1])
+        with col_pa:
             st.markdown("### 🎯 Top 3 Actions (Next 30 Days)")
-            st.markdown(f"1. **Audit ROAS:** Target > 1.8 to reduce {metrics.get('ad_spend_pct', 0)*100:.1f}% intensity.")
+            st.markdown(f"1. **Audit ROAS Intensity:** ({metrics.get('ad_spend_pct', 0)*100:.1f}%)")
             st.markdown(f"2. **Freeze 'Other' Spend:** Review ₹{cat_df[cat_df['Category']=='Other']['amount'].sum() if not cat_df[cat_df['Category']=='Other'].empty else 0:,.0f} in miscellaneous costs.")
             st.markdown(f"3. **COD Check:** Reduce {metrics.get('return_rate', 0)*100:.1f}% return rate.")
-            
-        with col_plan_b:
-            confidence = 85 if len(df) > 20 else 60
+        with col_pb:
             st.markdown("### Decision Confidence")
-            st.markdown(f"<div class='confidence-score'>{confidence}%</div>", unsafe_allow_html=True)
+            st.markdown("<div class='confidence-score'>85%</div>", unsafe_allow_html=True)
             st.markdown(f"<span class='warning-text'>Target Survival: {cash_out_str}</span>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # 8. INVESTOR PDF
+        # 9. INVESTOR PDF
         st.divider()
         def generate_pdf():
-            buffer = BytesIO()
-            with PdfPages(buffer) as pdf:
+            buf = BytesIO()
+            with PdfPages(buf) as pdf:
                 fig = plt.figure(figsize=(8.5, 11)); plt.axis("off")
                 txt = f"CASH REPORT\nCash: ₹{cash_now:,.0f}\nRunway: {metrics['runway_months']} Mo\n\n{cat_df.to_string(index=False)}"
-                plt.text(0.1, 0.95, txt, fontsize=11, family='monospace', va='top')
+                plt.text(0.1, 0.95, txt, fontsize=10, family='monospace', va='top')
                 pdf.savefig(fig); plt.close(fig)
-            buffer.seek(0); return buffer
+            buf.seek(0); return buf
         st.download_button("📥 Download Investor PDF", data=generate_pdf(), file_name="COO_Report.pdf", mime="application/pdf")
 
-        # 9. AI ADVICE
+        # 10. AI ADVICE
         st.divider()
         st.info(generate_coo_advice(cash_now, metrics['runway_months'], metrics.get('ad_spend_pct', 0), metrics.get('return_rate', 0), generate_decisions(metrics)))
 
