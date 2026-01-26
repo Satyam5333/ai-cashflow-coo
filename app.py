@@ -14,7 +14,7 @@ from engine.forecast import forecast_cashflow
 from engine.advice import generate_coo_advice
 
 # =================================================
-# PAGE CONFIG & STYLING (PRESERVED)
+# PAGE CONFIG & STYLING
 # =================================================
 st.set_page_config(page_title="AI Cash-Flow COO", layout="wide")
 
@@ -26,49 +26,47 @@ st.markdown("""
     }
     .kpi-title { font-size: 0.85rem; color: #6b7280; font-weight: 600; text-transform: uppercase; }
     .kpi-value { font-size: 1.8rem; font-weight: 700; margin-top: 0.5rem; }
-    .risk-box {
-        padding: 1rem; border-radius: 10px; background-color: #fff5f5; border: 1px solid #feb2b2; color: #c53030;
-    }
-    .decision-block {
-        padding: 1.2rem; border-radius: 12px; background-color: #f0fdf4; border: 1px solid #bbf7d0; color: #166534;
-    }
     .paid-plan {
         background-color: #f8fafc; padding: 2rem; border-radius: 15px; 
         border: 2px solid #e2e8f0; border-left: 10px solid #1e293b;
     }
-    .confidence-score { font-size: 2rem; font-weight: 800; color: #059669; }
+    .confidence-score {
+        font-size: 2rem; font-weight: 800; color: #059669;
+    }
     .warning-text { color: #dc2626; font-weight: 700; }
 </style>
 """, unsafe_allow_html=True)
 
 # =================================================
-# ---------------- HEADER (PRESERVED) ----------------
+# ---------------- HEADER ----------------
 # =================================================
 st.title("🧠 Cash-Flow Early Warning System for SMEs")
 st.subheader("Know when your business may face cash trouble — and what to do next.")
 
 st.markdown("""
 ### What this tool does
-- **Analyzes** Bank, Tally, or Accounting data (Debit/Credit logic)
+- **Analyzes** real transaction data (Debit/Credit logic supported)
 - **Categorizes** spending into Ads, Salary, and Rent heuristics
 - **Forecasts** cash position for the next 60 days
-- **Generates** Investor-ready reports & Strategic Action Plans
+- **Generates** Founder Action Plans & Investor Reports
 """)
 
 # =================================================
-# 📥 SAMPLE CSV DOWNLOAD (PRESERVED)
+# 📥 SAMPLE CSV DOWNLOAD
 # =================================================
 sample_data = """Date,Debit,Credit,Activity
 31/12/2025,,150000,Shopify Payout
-31/12/2025,45000,,Meta Ads
+31/12/2025,45000,,Meta Ads - Facebook/Insta
 30/12/2025,12000,,Office Rent
-28/12/2025,25000,,Salary
+28/12/2025,25000,,Staff Salary
+18/12/2025,8000,,Customer Refund
 """
-st.download_button("📥 Download Compatible Sample CSV", data=sample_data, file_name="sample_d2c_transactions.csv", mime="text/csv")
+st.download_button("📥 Download Compatible Sample CSV", data=sample_data, file_name="compatible_sample.csv", mime="text/csv")
+
 st.markdown("---")
 
 # =================================================
-# SIDEBAR CONTROLS (PRESERVED)
+# SIDEBAR CONTROLS
 # =================================================
 st.sidebar.header("🕹️ COO Simulation")
 opening_balance = st.sidebar.number_input("Starting Bank Balance (INR)", value=200000)
@@ -76,23 +74,20 @@ cod_delay = st.sidebar.slider("Avg COD Payment Delay (Days)", 0, 30, 7)
 forecast_horizon = st.sidebar.slider("Forecast Look-ahead (Days)", 30, 90, 60)
 
 # =================================================
-# MAIN LOGIC (SMART DATA ADAPTER ENABLED)
+# MAIN LOGIC
 # =================================================
 uploaded_file = st.file_uploader("Upload Data (CSV, Excel, or PDF)", type=["csv", "xlsx", "xls", "pdf"])
 
 if uploaded_file:
     try:
-        # 1. LOAD DATA & SMART HEADER ADAPTER (FIXES THE 'DATE' ERROR)
+        # 1. LOAD DATA & SMART ADAPTER (FOR DEBIT/CREDIT FILES)
         df = load_transactions(uploaded_file)
-        
-        # Force all column names to lowercase and strip spaces to match internal engine logic
         df.columns = [c.lower().strip() for c in df.columns]
 
-        # Handle the Debit/Credit columns found in your screenshot (Image 4)
+        # Handle Debit/Credit logic from your file screenshots
         if 'debit' in df.columns and 'credit' in df.columns:
             df['amount'] = df['credit'].fillna(0) - df['debit'].fillna(0)
         
-        # Map "Activity" column to "Description" if necessary
         if 'activity' in df.columns:
             df = df.rename(columns={'activity': 'description'})
 
@@ -100,14 +95,14 @@ if uploaded_file:
         metrics = calculate_business_metrics(df)
         cash_now = opening_balance + df["amount"].sum()
 
-        # 3. KPI CARDS (PRESERVED)
+        # 3. KPI CARDS
         c1, c2, c3, c4 = st.columns(4)
         with c1: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Cash Today</div><div class='kpi-value'>₹{cash_now:,.0f}</div></div>", unsafe_allow_html=True)
         with c2: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Runway</div><div class='kpi-value'>{metrics['runway_months']} Mo</div></div>", unsafe_allow_html=True)
         with c3: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Ad Spend %</div><div class='kpi-value'>{metrics.get('ad_spend_pct', 0)*100:.1f}%</div></div>", unsafe_allow_html=True)
         with c4: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Returns</div><div class='kpi-value'>{metrics.get('return_rate', 0)*100:.1f}%</div></div>", unsafe_allow_html=True)
 
-        # 4. CASH-OUT PREDICTION (PRESERVED)
+        # 4. CASH-OUT PREDICTION
         st.divider()
         cash_out_str = "Sustainable"
         if metrics['runway_months'] < 99:
@@ -117,7 +112,7 @@ if uploaded_file:
         else:
             st.success("✅ **Sustainable Growth Projected**")
 
-        # 5. SPEND ANALYSIS (PRESERVED)
+        # 5. SPEND ANALYSIS (TABLE FORMAT RESTORED)
         st.divider()
         st.subheader("📊 Spend Analysis")
         def categorize(desc):
@@ -126,50 +121,63 @@ if uploaded_file:
             if any(x in d for x in ["salary", "wage"]): return "Salary"
             if any(x in d for x in ["rent", "office"]): return "Rent"
             return "Other"
+        
         df["Category"] = df["description"].apply(categorize)
         cat_df = df[df["amount"] < 0].groupby("Category")["amount"].sum().abs().reset_index()
-        st.plotly_chart(px.pie(cat_df, values='amount', names='Category', hole=0.4), use_container_width=True)
+        
+        col_pie, col_table = st.columns([2, 1])
+        with col_pie:
+            st.plotly_chart(px.pie(cat_df, values='amount', names='Category', hole=0.4), use_container_width=True)
+        with col_table:
+            st.write("### Expense Details")
+            st.table(cat_df.sort_values(by="amount", ascending=False))
 
-        # 6. FORECAST CHART (PRESERVED)
+        # 6. FORECAST
         st.divider()
         st.subheader(f"📉 {forecast_horizon}-Day Cash Forecast")
-        f_df = forecast_cashflow(cash_today=cash_now, start_date=df["date"].max(), days=forecast_horizon,
-                               avg_daily_sales=metrics.get("avg_daily_sales", 0), avg_daily_ad_spend=metrics.get("avg_daily_ad_spend", 0), 
-                               avg_daily_fixed_cost=metrics.get("avg_daily_fixed_cost", 0), cod_delay_days=cod_delay, return_rate=metrics.get("return_rate", 0))
+        f_df = forecast_cashflow(
+            cash_today=cash_now, start_date=df["date"].max(), days=forecast_horizon,
+            avg_daily_sales=metrics.get("avg_daily_sales", 0), avg_daily_ad_spend=metrics.get("avg_daily_ad_spend", 0), 
+            avg_daily_fixed_cost=metrics.get("avg_daily_fixed_cost", 0), cod_delay_days=cod_delay, return_rate=metrics.get("return_rate", 0)
+        )
         st.plotly_chart(px.line(f_df, x="date", y="closing_cash", title="Liquidity Position"), use_container_width=True)
 
-        # 7. PAID-FEEL ACTION PLAN (PRESERVED)
+        # 7. FOUNDER ACTION PLAN (PAID-FEEL)
         st.divider()
         st.subheader("📋 Executive Strategic Action Plan")
         st.markdown("<div class='paid-plan'>", unsafe_allow_html=True)
-        col_pa, col_pb = st.columns([2, 1])
-        with col_pa:
+        
+        col_plan_a, col_plan_b = st.columns([2, 1])
+        with col_plan_a:
             st.markdown("### 🎯 Top 3 Actions (Next 30 Days)")
-            st.markdown(f"1. **Audit ROAS Intensity:** ({metrics.get('ad_spend_pct', 0)*100:.1f}%)")
-            st.markdown(f"2. **COD Verification Logic.**")
-            st.markdown("3. **Inventory Liquidity.**")
-        with col_pb:
+            st.markdown(f"1. **Audit ROAS:** Target > 1.8 to reduce {metrics.get('ad_spend_pct', 0)*100:.1f}% intensity.")
+            st.markdown(f"2. **Freeze 'Other' Spend:** Review ₹{cat_df[cat_df['Category']=='Other']['amount'].sum() if not cat_df[cat_df['Category']=='Other'].empty else 0:,.0f} in miscellaneous costs.")
+            st.markdown(f"3. **COD Check:** Reduce {metrics.get('return_rate', 0)*100:.1f}% return rate.")
+            
+        with col_plan_b:
+            confidence = 85 if len(df) > 20 else 60
             st.markdown("### Decision Confidence")
-            st.markdown("<div class='confidence-score'>85%</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='confidence-score'>{confidence}%</div>", unsafe_allow_html=True)
+            st.markdown(f"<span class='warning-text'>Target Survival: {cash_out_str}</span>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # 8. INVESTOR PDF & Q&A (PRESERVED)
+        # 8. INVESTOR PDF
         st.divider()
         def generate_pdf():
-            buf = BytesIO()
-            with PdfPages(buf) as pdf:
+            buffer = BytesIO()
+            with PdfPages(buffer) as pdf:
                 fig = plt.figure(figsize=(8.5, 11)); plt.axis("off")
-                txt = f"CASH REPORT\nCash: ₹{cash_now:,.0f}\nRunway: {metrics['runway_months']} Mo"
-                plt.text(0.1, 0.95, txt, fontsize=10, family='monospace', va='top')
+                txt = f"CASH REPORT\nCash: ₹{cash_now:,.0f}\nRunway: {metrics['runway_months']} Mo\n\n{cat_df.to_string(index=False)}"
+                plt.text(0.1, 0.95, txt, fontsize=11, family='monospace', va='top')
                 pdf.savefig(fig); plt.close(fig)
-            buf.seek(0); return buf
+            buffer.seek(0); return buffer
         st.download_button("📥 Download Investor PDF", data=generate_pdf(), file_name="COO_Report.pdf", mime="application/pdf")
 
-        # 9. AI ADVICE (PRESERVED)
+        # 9. AI ADVICE
         st.divider()
         st.info(generate_coo_advice(cash_now, metrics['runway_months'], metrics.get('ad_spend_pct', 0), metrics.get('return_rate', 0), generate_decisions(metrics)))
 
     except Exception as e:
         st.error(f"Analysis Error: {e}. Ensure column names match 'Date', 'Debit', 'Credit'.")
 else:
-    st.info("👋 Upload your Shopify/Bank CSV to begin.")
+    st.info("👋 Upload data to begin.")
