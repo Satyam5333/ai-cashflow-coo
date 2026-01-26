@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import timedelta
-import io
 
 # -----------------------------
 # Page config
@@ -21,7 +20,7 @@ st.write(
 st.divider()
 
 # -----------------------------
-# What this tool does (RESTORED)
+# What this tool does
 # -----------------------------
 st.subheader("What this tool does")
 st.markdown(
@@ -29,8 +28,8 @@ st.markdown(
 This system:
 
 - Analyzes your real transaction data  
-- Forecasts cash position and runway  
-- Flags overspending and concentration risks  
+- Forecasts cash runway and cash-out date  
+- Flags overspending and cost concentration risks  
 - Tells you **what to cut first** when cash is tight  
 
 *(No dashboards. No jargon. Just decisions.)*
@@ -40,23 +39,20 @@ This system:
 st.divider()
 
 # -----------------------------
-# Sample CSV download (REAL FILE)
+# Sample CSV download (FIXED)
 # -----------------------------
-sample_csv = io.StringIO()
-sample_csv.write(
-    "date,amount,type,description\n"
-    "2025-01-01,42000,Inflow,Sales\n"
-    "2025-01-02,-15000,Outflow,Facebook Ads\n"
-    "2025-01-03,-8000,Outflow,Salary\n"
-    "2025-01-04,-5000,Outflow,Rent\n"
-)
-sample_csv.seek(0)
+sample_csv_text = """date,amount,type,description
+2025-01-01,42000,Inflow,Sales
+2025-01-02,-15000,Outflow,Facebook Ads
+2025-01-03,-8000,Outflow,Salary
+2025-01-04,-5000,Outflow,Rent
+"""
 
 st.download_button(
-    "📥 Download sample transactions CSV",
-    sample_csv,
+    label="📥 Download sample transactions CSV",
+    data=sample_csv_text.encode("utf-8"),
     file_name="sample_transactions.csv",
-    mime="text/csv"
+    mime="text/csv",
 )
 
 st.divider()
@@ -114,7 +110,7 @@ ad_spend = abs(df[ads_mask & (df["amount"] < 0)]["amount"].sum())
 ad_ratio = (ad_spend / inflows * 100) if inflows > 0 else 0
 
 # -----------------------------
-# AI COO SUMMARY (DETAILED & REAL)
+# AI COO Summary (meaningful)
 # -----------------------------
 st.subheader("📊 AI COO Summary")
 
@@ -122,38 +118,44 @@ st.markdown(
     f"""
 **Cash today:** ₹{cash_today:,.0f}  
 
-Your business is burning approximately **₹{daily_burn:,.0f} per day**,  
-giving you a **cash runway of ~{runway_days} days**.
+You are spending **₹{daily_burn:,.0f} per day**, giving you a runway of  
+**~{runway_days} days**.
 
-If nothing changes, **cash may run out around:**  
+If nothing changes, cash may run out around:  
 🧨 **{cash_out_date.date()}**
 
 **Advertising intensity:**  
-Ads consume **{ad_ratio:.1f}% of your revenue**.
+Ads consume **{ad_ratio:.1f}% of revenue**.
 """
 )
 
 if ad_ratio > 25:
     st.warning(
-        "Growth is heavily dependent on advertising. "
-        "If returns weaken, cash pressure will escalate quickly."
+        "High dependence on advertising. "
+        "If sales slow down, cash pressure will increase rapidly."
     )
 
 st.divider()
 
 # -----------------------------
-# Expense category breakdown (FIXED PIE)
+# Expense category breakdown (simple & clean)
 # -----------------------------
 st.subheader("📉 Expense category breakdown")
 
 expense_df = df[df["amount"] < 0].copy()
 expense_df["abs_amount"] = expense_df["amount"].abs()
 
-expense_df["category"] = expense_df["description"].apply(
-    lambda x: "Advertising"
-    if any(k in x.lower() for k in ["ad", "facebook", "google", "instagram"])
-    else x
-)
+def map_category(desc):
+    d = desc.lower()
+    if "ad" in d or "facebook" in d or "google" in d or "instagram" in d:
+        return "Advertising"
+    if "salary" in d:
+        return "Salary"
+    if "rent" in d:
+        return "Rent"
+    return "Other"
+
+expense_df["category"] = expense_df["description"].apply(map_category)
 
 expense_breakdown = (
     expense_df.groupby("category")["abs_amount"]
@@ -161,43 +163,35 @@ expense_breakdown = (
     .sort_values(ascending=False)
 )
 
-# Group small items into "Other"
-top = expense_breakdown.head(4)
-other = expense_breakdown.iloc[4:].sum()
-if other > 0:
-    top["Other"] = other
-
-# ----- CLEAN PIE (NO OVERLAP) -----
 fig, ax = plt.subplots(figsize=(4, 4))
-wedges, _ , _ = ax.pie(
-    top.values,
+ax.pie(
+    expense_breakdown.values,
+    labels=None,
     autopct="%1.0f%%",
-    startangle=90,
-    pctdistance=0.7,
+    pctdistance=0.75,
     textprops={"fontsize": 9},
-    labels=None
 )
-
 ax.legend(
-    wedges,
-    top.index,
-    title="Category",
+    expense_breakdown.index,
     loc="center left",
     bbox_to_anchor=(1.05, 0.5),
-    fontsize=9
+    fontsize=9,
 )
-
 ax.axis("equal")
+
 st.pyplot(fig)
 
 # -----------------------------
 # Cost concentration risk
 # -----------------------------
-top_two_share = top.values[:2].sum() / top.values.sum() * 100
-if top_two_share > 65:
+top_two = expense_breakdown.iloc[:2].sum()
+total_exp = expense_breakdown.sum()
+share = top_two / total_exp * 100
+
+if share > 65:
     st.warning(
-        f"⚠️ **Cost concentration risk:** "
-        f"Top 2 categories make up {top_two_share:.0f}% of total expenses."
+        f"⚠️ Cost concentration risk: "
+        f"Top 2 categories make up {share:.0f}% of total expenses."
     )
 
 # -----------------------------
@@ -209,10 +203,13 @@ largest_cost = expense_breakdown.index[0]
 
 st.markdown(
     f"""
-1️⃣ **{largest_cost}** is your biggest cash drain  
-2️⃣ Advertising is the fastest lever for short-term relief  
-3️⃣ Avoid cutting fixed costs unless runway < 60 days  
+**Primary cut candidate:** **{largest_cost}**
 
-👉 **Action:** Reduce variable spend first and reassess in 7 days.
+This category gives the **fastest cash relief** with the least operational damage.
+
+**Recommended order:**
+1. Reduce variable costs (ads, discretionary spend)
+2. Renegotiate fixed costs only if runway < 60 days
+3. Re-evaluate after 7 days
 """
 )
