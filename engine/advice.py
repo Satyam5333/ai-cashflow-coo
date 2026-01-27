@@ -27,11 +27,12 @@ def get_real_ai_response(prompt, metrics, cash_now, burn_mult):
         - Cash Today: INR {cash_now:,.0f}
         - Burn Multiple: {burn_mult:.2f}x
         - Survival Runway: {metrics.get('runway_months', 0)} months
-        - Marketing Spend: {metrics.get('ad_spend_pct', 0)*100:.1f}%
+        - Marketing Spend: {metrics.get('ad_spend_pct', 0)*100:.1f}% of outflows
         
-        Answer the user's question using this data. Be direct and professional.
+        Answer the user's question using this data. Be direct, professional, and focus on cash discipline.
         User Question: {prompt}
         """
+        
         response = model.generate_content(context)
         return response.text
     except Exception as e:
