@@ -15,7 +15,7 @@ from engine.forecast import forecast_cashflow
 from engine.advice import generate_coo_advice
 
 # =================================================
-# PAGE CONFIG & STYLING (PRESERVED)
+# PAGE CONFIG & STYLING
 # =================================================
 st.set_page_config(page_title="Universal Cash-Flow COO", layout="wide")
 
@@ -32,10 +32,13 @@ st.markdown("""
         border: 2px solid #e2e8f0; border-left: 10px solid #1e293b;
     }
     .confidence-score { font-size: 2rem; font-weight: 800; color: #059669; }
+    .warning-text { color: #dc2626; font-weight: 700; }
 </style>
 """, unsafe_allow_html=True)
 
+# =================================================
 # ---------------- HEADER ----------------
+# =================================================
 st.title("🧠 AI Investor Flash Report & COO Dashboard")
 st.subheader("Know when your business may face cash trouble — and exactly what to do next")
 
@@ -44,6 +47,7 @@ st.markdown("""
 - **Reads** universal transaction data (CSV, Excel, or structured exports)
 - **Identifies** what is actually driving cash burn
 - **Predicts** how long your money will last
+- **Flags** hidden structural risks
 - **Generates Investor-Ready "Flash" Reports** automatically
 """)
 
@@ -57,13 +61,17 @@ sample_data = """Date,Debit,Credit,Activity
 st.download_button("📥 Download Universal Sample CSV", data=sample_data, file_name="sample_cashflow_data.csv", mime="text/csv")
 st.markdown("---")
 
-# 🕹️ SIDEBAR CONTROLS
+# =================================================
+# SIDEBAR CONTROLS
+# =================================================
 st.sidebar.header("🕹️ COO Simulation")
 opening_balance = st.sidebar.number_input("Starting Bank Balance", value=200000)
 cod_delay = st.sidebar.slider("Avg Payment Delay (Days)", 0, 30, 7)
 forecast_horizon = st.sidebar.slider("Forecast Look-ahead (Days)", 30, 90, 60)
 
-# 📥 MAIN LOGIC
+# =================================================
+# MAIN LOGIC (WITH AGGRESSIVE DATA CLEANING)
+# =================================================
 uploaded_file = st.file_uploader("Upload Data (CSV or Excel preferred)", type=["csv", "xlsx", "xls", "pdf"])
 
 if uploaded_file:
@@ -72,7 +80,7 @@ if uploaded_file:
         df = load_transactions(uploaded_file)
         df.columns = [str(c).lower().strip() for c in df.columns]
 
-        # AGGRESSIVE NUMBER CLEANING ENGINE (RESTORED)
+        # AGGRESSIVE NUMBER CLEANING ENGINE
         def clean_val(val):
             if pd.isna(val) or val == "": return 0.0
             cleaned = re.sub(r'[^\d.-]', '', str(val))
@@ -83,7 +91,7 @@ if uploaded_file:
         if 'txn date' in df.columns: df = df.rename(columns={'txn date': 'date'})
         if 'activity' in df.columns: df = df.rename(columns={'activity': 'description'})
 
-        # Logic for Withdrawals/Deposits vs. Amount/Type (RESTORED)
+        # Logic for Withdrawals/Deposits or Amount/Type formats
         if 'withdrawals' in df.columns and 'deposits' in df.columns:
             df['amount'] = df['deposits'].apply(clean_val) - df['withdrawals'].apply(clean_val)
         elif 'amount' in df.columns and 'type' in df.columns:
@@ -94,7 +102,7 @@ if uploaded_file:
         metrics = calculate_business_metrics(df)
         cash_now = opening_balance + df["amount"].sum()
         
-        # INVESTOR METRICS: BURN MULTIPLE (RESTORED)
+        # INVESTOR METRICS: BURN MULTIPLE
         net_burn = df[df['amount'] < 0]['amount'].sum()
         net_new_rev = df[df['amount'] > 0]['amount'].sum()
         burn_multiple = abs(net_burn / net_new_rev) if net_new_rev != 0 else 0
@@ -106,7 +114,7 @@ if uploaded_file:
         with c3: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Burn Multiple</div><div class='kpi-value'>{burn_multiple:.2f}x</div></div>", unsafe_allow_html=True)
         with c4: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Ad Spend %</div><div class='kpi-value'>{metrics.get('ad_spend_pct', 0)*100:.1f}%</div></div>", unsafe_allow_html=True)
 
-        # 4. SPEND ANALYSIS (CHARTS RESTORED)
+        # 4. SPEND ANALYSIS
         st.divider()
         st.subheader("📊 Spend Analysis")
         def categorize(desc):
@@ -123,20 +131,20 @@ if uploaded_file:
             with col_pie: st.plotly_chart(px.pie(cat_df, values='amount', names='Category', hole=0.4), use_container_width=True)
             with col_table: st.write("### Flow Details"); st.table(cat_df.sort_values(by="amount", ascending=False))
         else:
-            st.warning("No expense data found to display charts. Ensure your file has withdrawal/debit entries.")
+            st.warning("No expense data found to display charts.")
 
-        # 5. FORECAST CHART (RESTORED)
+        # 5. FORECAST CHART
         st.divider()
-        st.subheader(f"📉 {forecast_horizon}-Day Forecast")
+        st.subheader(f"📉 {forecast_horizon}-Day Cash Forecast")
         f_df = forecast_cashflow(cash_today=cash_now, start_date=df["date"].max(), days=forecast_horizon,
                                avg_daily_sales=metrics.get("avg_daily_sales", 0), avg_daily_ad_spend=metrics.get("avg_daily_ad_spend", 0), 
                                avg_daily_fixed_cost=metrics.get("avg_daily_fixed_cost", 0), cod_delay_days=cod_delay, return_rate=metrics.get("return_rate", 0))
         st.plotly_chart(px.line(f_df, x="date", y="closing_cash", title="Predicted Liquidity"), use_container_width=True)
 
-        # 6. QUESTION SEARCH / DEEP DIVE (RESTORED)
+        # 6. DEEP-DIVE SEARCH (QUESTION SEARCH)
         st.divider()
         st.subheader("🔍 Deep-Dive Analysis")
-        q = st.text_input("Ask about your Tally/Bank records (e.g. 'total rent' or 'highest expense')")
+        q = st.text_input("Ask about your records (e.g. 'total rent' or 'highest expense')")
         if q:
             query = q.lower()
             if "rent" in query:
@@ -146,7 +154,7 @@ if uploaded_file:
                 top = df.sort_values(by='amount').iloc[0]
                 st.write(f"🚩 **Top Expense:** {top['description']} (₹{abs(top['amount']):,.0f})")
 
-        # 7. ACTION PLAN (RESTORED)
+        # 7. FOUNDER ACTION PLAN
         st.divider()
         st.subheader("📋 Executive Strategic Action Plan")
         st.markdown("<div class='paid-plan'>", unsafe_allow_html=True)
@@ -154,15 +162,15 @@ if uploaded_file:
         with col_pa:
             st.markdown("### 🎯 Efficiency Priorities")
             st.markdown(f"1. **Capital Efficiency:** Burn Multiple is {burn_multiple:.2f}x.")
-            st.markdown(f"2. **Overhead Audit:** Review outflows in high-cost categories.")
+            st.markdown(f"2. **Overhead Audit:** Review outflows in operational categories.")
             st.markdown(f"3. **Survival Horizon:** Estimated cash-out in {metrics['runway_months']} months.")
         with col_pb:
             st.markdown("### Strategic Confidence"); st.markdown("<div class='confidence-score'>85%</div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # 8. INVESTOR PDF (RESTORED)
+        # 8. INVESTOR PDF
         st.divider()
-        def generate_universal_report():
+        def generate_report():
             buf = BytesIO()
             with PdfPages(buf) as pdf:
                 fig = plt.figure(figsize=(8.5, 11)); plt.axis("off")
@@ -171,12 +179,17 @@ if uploaded_file:
                        f"-----------------------------------\n"
                        f"Liquidity: ₹{cash_now:,.0f}\n"
                        f"Survival Months: {metrics['runway_months']}\n"
-                       f"Burn Multiple: {burn_multiple:.2f}x")
+                       f"Burn Multiple: {burn_multiple:.2f}x\n"
+                       f"Ad Intensity: {metrics.get('ad_spend_pct', 0)*100:.1f}%")
                 plt.text(0.1, 0.95, txt, fontsize=10, family='monospace', va='top')
                 pdf.savefig(fig); plt.close(fig)
             buf.seek(0); return buf
         
-        st.download_button("📥 Download Universal Flash PDF", data=generate_universal_report(), file_name="Financial_Flash_Report.pdf", mime="application/pdf")
+        st.download_button("📥 Download Universal Flash PDF", data=generate_report(), file_name="Financial_Flash_Report.pdf", mime="application/pdf")
+
+        # 9. AI ADVICE
+        st.divider()
+        st.info(generate_coo_advice(cash_now, metrics['runway_months'], metrics.get('ad_spend_pct', 0), metrics.get('return_rate', 0), generate_decisions(metrics)))
 
     except Exception as e: st.error(f"Analysis Error: {e}")
 else: st.info("👋 Upload transaction data to begin.")
