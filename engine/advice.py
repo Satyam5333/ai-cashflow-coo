@@ -47,3 +47,15 @@ def generate_coo_advice(
     lines.append("*This analysis is based on heuristic pattern matching of your bank statements. Review with your CA before making major capital shifts.*")
 
     return "\n".join(lines)
+def get_chat_response(prompt, metrics, cash_now, burn_mult):
+    """Hardcore AI Logic for the COO Chatbot."""
+    p = prompt.lower()
+    
+    if "burn" in p:
+        return f"Your current Burn Multiple is {burn_mult:.2f}x. To reduce this, focus on lowering fixed overheads or increasing high-margin revenue."
+    if "runway" in p or "survive" in p:
+        return f"Based on current outflows, you have {metrics['runway_months']} months of runway. Your cash position is ₹{cash_now:,.0f}."
+    if "marketing" in p or "ads" in p:
+        return f"Marketing accounts for {metrics.get('ad_spend_pct', 0)*100:.1f}% of your spend. Review ROAS before increasing this budget."
+    
+    return "I am analyzing your data. Ask me specifically about your runway, burn rate, or marketing efficiency."
