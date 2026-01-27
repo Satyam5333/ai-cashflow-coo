@@ -1,61 +1,64 @@
-def generate_coo_advice(
-    cash_today,
-    runway_days,
-    ad_spend_pct,
-    return_rate,
-    decisions
-):
+import pandas as pd
+
+def generate_coo_advice(cash, runway, ad_spend, returns, decisions):
     """
-    Acts as a Strategic COO for D2C/Shopify sellers.
-    Converts raw metrics into a professional executive summary.
+    Generates strategic advice for the Executive Action Plan.
     """
-    lines = []
-
-    # 1. THE BOTTOM LINE
-    lines.append("### 🚩 EXECUTIVE SUMMARY")
-    lines.append(f"As of today, your liquid cash position is **₹{cash_today:,.0f}**.")
+    advice_list = []
     
-    # Runway Logic
-    if isinstance(runway_days, (int, float)):
-        if runway_days >= 90:
-            lines.append(f"Your runway is healthy at approximately **{runway_days} months**.")
-        else:
-            lines.append(f"⚠️ **URGENT:** Your runway has dropped to **{runway_days} months**. Action is required to extend liquidity.")
+    # 1. Runway Logic
+    if runway < 3:
+        advice_list.append(f"🔴 CRITICAL: Survival window is only {runway} months. Freeze all non-essential outflows immediately.")
+    elif runway < 6:
+        advice_list.append(f"🟠 WARNING: {runway} month runway detected. Audit vendor contracts for potential savings.")
     else:
-        lines.append("Your business is currently **Cash Flow Positive**.")
+        advice_list.append(f"🟢 STABLE: {runway} month runway provides room for strategic optimization.")
 
-    # 2. UNIT ECONOMICS CHECK
-    lines.append("\n### 📊 UNIT ECONOMICS & EFFICIENCY")
-    lines.append(f"- **Marketing Intensity:** Your ad spend is **{ad_spend_pct*100:.1f}%** of total sales.")
-    lines.append(f"- **Customer Friction:** Your return/refund rate is **{return_rate*100:.1f}%**.")
-
-    # 3. RISK IDENTIFICATION
-    lines.append("\n### ⚡ CRITICAL RISKS")
-    if decisions["risks"]:
-        for risk in decisions["risks"]:
-            lines.append(f"- {risk}")
-    else:
-        lines.append("- No immediate structural risks detected in recent transactions.")
-
-    # 4. ACTION PLAN
-    lines.append("\n### ✅ RECOMMENDED COO ACTIONS")
-    if decisions["actions"]:
-        for action in decisions["actions"]:
-            lines.append(f"- {action}")
+    # 2. Marketing Logic
+    if ad_spend > 0.40:
+        advice_list.append(f"⚠️ HIGH AD INTENSITY: {ad_spend*100:.1f}% of spend is on ads. Verify ROAS is above 3x before maintaining budget.")
     
-    lines.append("\n---")
-    lines.append("*This analysis is based on heuristic pattern matching of your bank statements. Review with your CA before making major capital shifts.*")
+    # 3. Returns Logic
+    if returns > 0.15:
+        advice_list.append(f"📦 RETURN RISK: {returns*100:.1f}% return rate is eroding margins. Review product quality or courier partner performance.")
 
-    return "\n".join(lines)
+    return advice_list
+
 def get_chat_response(prompt, metrics, cash_now, burn_mult):
-    """Hardcore AI Logic for the COO Chatbot."""
+    """
+    Hardcore AI Logic for the COO Chatbot.
+    Provides real-time answers based on processed financial metrics.
+    """
     p = prompt.lower()
     
-    if "burn" in p:
-        return f"Your current Burn Multiple is {burn_mult:.2f}x. To reduce this, focus on lowering fixed overheads or increasing high-margin revenue."
-    if "runway" in p or "survive" in p:
-        return f"Based on current outflows, you have {metrics['runway_months']} months of runway. Your cash position is ₹{cash_now:,.0f}."
-    if "marketing" in p or "ads" in p:
-        return f"Marketing accounts for {metrics.get('ad_spend_pct', 0)*100:.1f}% of your spend. Review ROAS before increasing this budget."
-    
-    return "I am analyzing your data. Ask me specifically about your runway, burn rate, or marketing efficiency."
+    # ADVANCED RESPONSE LOGIC
+    if any(x in p for x in ["burn", "efficiency", "multiple"]):
+        status = "CRITICAL" if burn_mult > 1.5 else "OPTIMAL"
+        return (f"Your **Burn Multiple is {burn_mult:.2f}x**, which I classify as **{status}**. "
+                f"For a lean operation, we target a multiple below 1.1x. "
+                f"Currently, for every ₹1 of new revenue, you are burning ₹{burn_mult:.2f}.")
+
+    if any(x in p for x in ["runway", "survive", "dead", "cash left"]):
+        runway = metrics.get('runway_months', 0)
+        return (f"At current spend levels, you have **{runway} months** of runway left. "
+                f"Your total liquidity is **₹{cash_now:,.0f}**. I recommend maintaining a 6-month buffer "
+                f"to weather market volatility.")
+
+    if any(x in p for x in ["ads", "marketing", "facebook", "google", "meta"]):
+        ad_pct = metrics.get('ad_spend_pct', 0) * 100
+        return (f"Marketing represents **{ad_pct:.1f}% of your total outflows**. "
+                f"If this isn't generating at least 3x in attributed sales, we should reallocate "
+                f"this capital to working capital reserves.")
+
+    if any(x in p for x in ["hello", "hi", "who are you"]):
+        return ("I am your Virtual AI COO. I have analyzed your transactions and am ready to "
+                "provide data-backed advice on your runway, burn rate, and operational risks.")
+
+    if any(x in p for x in ["sale", "revenue", "income"]):
+        return ("I am currently monitoring your cash inflows. While revenue is vital, my primary "
+                "focus is your **Cash Discipline** and ensuring your burn rate doesn't outpace growth.")
+
+    return ("I've processed your data. Ask me specifically about: \n"
+            "1. **Runway** (How long can we survive?)\n"
+            "2. **Burn Multiple** (Are we efficient?)\n"
+            "3. **Vendor Risks** (Where is the money going?)")
