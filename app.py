@@ -13,7 +13,7 @@ from engine.metrics import calculate_business_metrics
 from engine.decisions import generate_decisions
 from engine.forecast import forecast_cashflow
 from engine.advice import generate_coo_advice
-
+from engine.advice import get_chat_response # New engine for real-time chat
 # PART 2: PAGE CONFIG & CSS
 st.set_page_config(page_title="Hardcore AI COO", layout="wide")
 st.markdown("""
@@ -53,7 +53,7 @@ st.markdown("---")
 st.sidebar.header("🕹️ Simulation Controls")
 opening_balance = st.sidebar.number_input("Starting Balance (INR)", value=200000)
 cod_delay = st.sidebar.slider("Payment Delay (Days)", 0, 30, 7)
-show_search = st.sidebar.toggle("Enable Deep-Dive Search", value=True)
+show_ai_chat = st.sidebar.toggle("💬 Enable AI COO Chatbot", value=True)
 
 # PART 6: DATA INGESTION
 uploaded_file = st.file_uploader("Upload Transaction Data", type=["csv", "xlsx", "xls"])
@@ -152,3 +152,31 @@ if uploaded_file:
 
     except Exception as e: st.error(f"Analysis Error: {e}")
 else: st.info("👋 Upload data to begin.")
+# =================================================
+# PART 10: REAL-TIME AI COO CHATBOT (HARDCORE)
+# =================================================
+if show_ai_chat:
+    st.divider()
+    st.subheader("💬 Chat with your Virtual COO")
+    st.info("Ask anything about your burn rate, vendor risks, or survival strategy.")
+
+    # Initialize chat history
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    # Display chat history
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # Chat Input
+    if prompt := st.chat_input("Ex: 'How can I reduce my burn multiple?'"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            # The AI reads your current 'metrics' and 'cash_now' to answer correctly
+            response = get_chat_response(prompt, metrics, cash_now, burn_mult)
+            st.markdown(response)
+            st.session_state.messages.append({"role": "assistant", "content": response})
