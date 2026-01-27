@@ -43,8 +43,7 @@ st.markdown("""
 # ---------------- HEADER (PRESERVED) ----------------
 # =================================================
 st.title("🧠 Cash-Flow Early Warning System for SMEs")
-# UPDATED LINE AS REQUESTED
-st.subheader("Know when your business may face cash trouble — and exactly what to do next")
+st.subheader("Compatible with ICICI, Axis, Tally, and Shopify Exports")
 
 st.markdown("""
 ### What this tool does
