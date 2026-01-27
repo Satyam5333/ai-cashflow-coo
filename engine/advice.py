@@ -12,7 +12,7 @@ def generate_coo_advice(cash, runway, ad_spend, returns, burn_mult):
     return advice
 
 def get_real_ai_response(prompt, metrics, cash_now, burn_mult):
-    """Connects to Gemini API to provide real-time COO strategic answers."""
+    """Connects to Gemini API for real-time strategic answers."""
     try:
         api_key = st.session_state.get("gemini_api_key", "")
         if not api_key:
