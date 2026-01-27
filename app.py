@@ -72,16 +72,18 @@ if uploaded_file:
         df = load_transactions(uploaded_file)
         df.columns = [str(c).lower().strip() for c in df.columns]
 
-        # AGGRESSIVE CLEANING logic restored to prevent 'str' absolute error
+        # AGGRESSIVE NUMBER CLEANING ENGINE (RESTORED)
         def clean_val(val):
             if pd.isna(val) or val == "": return 0.0
             cleaned = re.sub(r'[^\d.-]', '', str(val))
             try: return float(cleaned)
             except: return 0.0
 
+        # Universal Column Mapping
         if 'txn date' in df.columns: df = df.rename(columns={'txn date': 'date'})
         if 'activity' in df.columns: df = df.rename(columns={'activity': 'description'})
 
+        # Logic for Withdrawals/Deposits vs. Amount/Type (RESTORED)
         if 'withdrawals' in df.columns and 'deposits' in df.columns:
             df['amount'] = df['deposits'].apply(clean_val) - df['withdrawals'].apply(clean_val)
         elif 'amount' in df.columns and 'type' in df.columns:
@@ -92,7 +94,7 @@ if uploaded_file:
         metrics = calculate_business_metrics(df)
         cash_now = opening_balance + df["amount"].sum()
         
-        # INVESTOR METRICS: BURN MULTIPLE
+        # INVESTOR METRICS: BURN MULTIPLE (RESTORED)
         net_burn = df[df['amount'] < 0]['amount'].sum()
         net_new_rev = df[df['amount'] > 0]['amount'].sum()
         burn_multiple = abs(net_burn / net_new_rev) if net_new_rev != 0 else 0
@@ -104,7 +106,7 @@ if uploaded_file:
         with c3: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Burn Multiple</div><div class='kpi-value'>{burn_multiple:.2f}x</div></div>", unsafe_allow_html=True)
         with c4: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Ad Spend %</div><div class='kpi-value'>{metrics.get('ad_spend_pct', 0)*100:.1f}%</div></div>", unsafe_allow_html=True)
 
-        # 4. SPEND ANALYSIS
+        # 4. SPEND ANALYSIS (CHARTS RESTORED)
         st.divider()
         st.subheader("📊 Spend Analysis")
         def categorize(desc):
@@ -116,11 +118,14 @@ if uploaded_file:
         df["Category"] = df["description"].apply(categorize)
         cat_df = df[df["amount"] < 0].groupby("Category")["amount"].sum().abs().reset_index()
         
-        col_pie, col_table = st.columns([2, 1])
-        with col_pie: st.plotly_chart(px.pie(cat_df, values='amount', names='Category', hole=0.4), use_container_width=True)
-        with col_table: st.write("### Flow Details"); st.table(cat_df.sort_values(by="amount", ascending=False))
+        if not cat_df.empty:
+            col_pie, col_table = st.columns([2, 1])
+            with col_pie: st.plotly_chart(px.pie(cat_df, values='amount', names='Category', hole=0.4), use_container_width=True)
+            with col_table: st.write("### Flow Details"); st.table(cat_df.sort_values(by="amount", ascending=False))
+        else:
+            st.warning("No expense data found to display charts. Ensure your file has withdrawal/debit entries.")
 
-        # 5. FORECAST
+        # 5. FORECAST CHART (RESTORED)
         st.divider()
         st.subheader(f"📉 {forecast_horizon}-Day Forecast")
         f_df = forecast_cashflow(cash_today=cash_now, start_date=df["date"].max(), days=forecast_horizon,
@@ -128,21 +133,34 @@ if uploaded_file:
                                avg_daily_fixed_cost=metrics.get("avg_daily_fixed_cost", 0), cod_delay_days=cod_delay, return_rate=metrics.get("return_rate", 0))
         st.plotly_chart(px.line(f_df, x="date", y="closing_cash", title="Predicted Liquidity"), use_container_width=True)
 
-        # 6. ACTION PLAN
+        # 6. QUESTION SEARCH / DEEP DIVE (RESTORED)
+        st.divider()
+        st.subheader("🔍 Deep-Dive Analysis")
+        q = st.text_input("Ask about your Tally/Bank records (e.g. 'total rent' or 'highest expense')")
+        if q:
+            query = q.lower()
+            if "rent" in query:
+                val = df[df['description'].str.contains('rent', case=False, na=False)]['amount'].abs().sum()
+                st.write(f"📊 **Audit Result:** Total Rent found is ₹{val:,.0f}")
+            elif "highest" in query:
+                top = df.sort_values(by='amount').iloc[0]
+                st.write(f"🚩 **Top Expense:** {top['description']} (₹{abs(top['amount']):,.0f})")
+
+        # 7. ACTION PLAN (RESTORED)
         st.divider()
         st.subheader("📋 Executive Strategic Action Plan")
         st.markdown("<div class='paid-plan'>", unsafe_allow_html=True)
         col_pa, col_pb = st.columns([2, 1])
         with col_pa:
             st.markdown("### 🎯 Efficiency Priorities")
-            st.markdown(f"1. **Capital Efficiency:** Burn Multiple is {burn_multiple:.2f}x (VC Standard < 1.5x).")
-            st.markdown(f"2. **Overhead Audit:** Review outflows in operational categories.")
+            st.markdown(f"1. **Capital Efficiency:** Burn Multiple is {burn_multiple:.2f}x.")
+            st.markdown(f"2. **Overhead Audit:** Review outflows in high-cost categories.")
             st.markdown(f"3. **Survival Horizon:** Estimated cash-out in {metrics['runway_months']} months.")
         with col_pb:
             st.markdown("### Strategic Confidence"); st.markdown("<div class='confidence-score'>85%</div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # 7. INVESTOR PDF
+        # 8. INVESTOR PDF (RESTORED)
         st.divider()
         def generate_universal_report():
             buf = BytesIO()
@@ -153,8 +171,7 @@ if uploaded_file:
                        f"-----------------------------------\n"
                        f"Liquidity: ₹{cash_now:,.0f}\n"
                        f"Survival Months: {metrics['runway_months']}\n"
-                       f"Burn Multiple: {burn_multiple:.2f}x\n"
-                       f"Ad Intensity: {metrics.get('ad_spend_pct', 0)*100:.1f}%")
+                       f"Burn Multiple: {burn_multiple:.2f}x")
                 plt.text(0.1, 0.95, txt, fontsize=10, family='monospace', va='top')
                 pdf.savefig(fig); plt.close(fig)
             buf.seek(0); return buf
