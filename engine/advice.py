@@ -21,18 +21,7 @@ def get_real_ai_response(prompt, metrics, cash_now, burn_mult):
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash')
 
-        context = f"""
-        You are an expert Virtual COO and Chartered Accountant. 
-        Current SME Financial Data:
-        - Cash Today: INR {cash_now:,.0f}
-        - Burn Multiple: {burn_mult:.2f}x
-        - Survival Runway: {metrics.get('runway_months', 0)} months
-        - Marketing Spend: {metrics.get('ad_spend_pct', 0)*100:.1f}% of outflows
-        
-        Answer the user's question using this data. Be direct, professional, and focus on cash discipline.
-        User Question: {prompt}
-        """
-        
+        context = f"You are a Virtual COO. Cash: INR {cash_now:,.0f}, Burn: {burn_mult:.2f}x, Runway: {metrics.get('runway_months', 0)} Mo. Answer this: {prompt}"
         response = model.generate_content(context)
         return response.text
     except Exception as e:
