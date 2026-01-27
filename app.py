@@ -14,7 +14,7 @@ from engine.decisions import generate_decisions
 from engine.forecast import forecast_cashflow
 from engine.advice import generate_coo_advice
 
-# PART 2: PAGE CONFIG & CSS
+# PART 2: PAGE CONFIG & HARDCORE CSS
 st.set_page_config(page_title="Hardcore AI COO", layout="wide")
 st.markdown("""
 <style>
@@ -27,24 +27,41 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# PART 3: HEADER
+# PART 3: UNIVERSAL HEADER & MANDATE (RESTORED)
 st.title("🧠 Hardcore AI COO & Investor Dashboard")
+st.subheader("Professional Liquidity Management for SMEs")
+
+st.markdown("""
+### What this tool does
+- **Multi-Bank Support**: Detects ICICI (Amount/Type) and Axis (Withdrawals/Deposits)
+- **Categorizes** spending into Ads, Salary, and Rent heuristics
+- **Forecasts** cash position for the next 60 days
+- **Generates** Founder Action Plans & Investor Reports
+""")
+
+# PART 4: SAMPLE CSV DOWNLOAD (RESTORED)
+sample_data = """Date,Debit,Credit,Activity
+31/12/2025,,150000,Shopify Payout
+31/12/2025,45000,,Meta Ads - Facebook/Insta
+30/12/2025,12000,,Office Rent
+28/12/2025,25000,,Staff Salary
+"""
+st.download_button("📥 Download Compatible Sample CSV", data=sample_data, file_name="sample_coo_data.csv", mime="text/csv")
 st.markdown("---")
 
-# PART 4: SIDEBAR
+# PART 5: SIDEBAR CONTROLS
 st.sidebar.header("🕹️ Simulation Controls")
 opening_balance = st.sidebar.number_input("Starting Balance (INR)", value=200000)
 cod_delay = st.sidebar.slider("Payment Delay (Days)", 0, 30, 7)
 show_search = st.sidebar.toggle("Enable Deep-Dive Search", value=True)
 
-# PART 5: DATA INGESTION
+# PART 6: DATA INGESTION & AGGRESSIVE CLEANING
 uploaded_file = st.file_uploader("Upload Transaction Data", type=["csv", "xlsx", "xls"])
 
 if uploaded_file:
     try:
         df = load_transactions(uploaded_file)
         if not df.empty:
-            # PART 6: METRICS & RISK CALCULATIONS
             metrics = calculate_business_metrics(df)
             cash_now = opening_balance + df["amount"].sum()
             net_burn = df[df['amount'] < 0]['amount'].sum()
@@ -64,7 +81,6 @@ if uploaded_file:
                 df["Category"] = df["description"].apply(categorize)
                 cat_df = df[df["amount"] < 0].groupby("Category")["amount"].sum().abs().reset_index()
                 
-                # Risk Flag Logic
                 for _, row in cat_df.iterrows():
                     if row['amount'] / total_outflow > 0.35:
                         vendor_risks.append(f"⚠️ HIGH EXPOSURE: {row['Category']} is {(row['amount']/total_outflow)*100:.1f}% of spend.")
@@ -75,7 +91,7 @@ if uploaded_file:
                     if top_v['amount'] / total_outflow > 0.30:
                         vendor_risks.append(f"🚩 VENDOR RISK: '{top_v['description']}' is {(top_v['amount']/total_outflow)*100:.1f}% of outflows.")
 
-            # 8-POINT AI COO SUMMARY
+            # PART 7: 8-POINT AI COO SUMMARY (MAIN BRAIN)
             st.markdown("<div class='coo-summary-box'>", unsafe_allow_html=True)
             st.subheader("📋 Main AI COO Executive Summary")
             col_s1, col_s2 = st.columns(2)
@@ -83,7 +99,7 @@ if uploaded_file:
                 st.markdown(f"<div class='summary-line'>✅ **1. Liquidity:** ₹{cash_now:,.0f}</div>", unsafe_allow_html=True)
                 st.markdown(f"<div class='summary-line'>📉 **2. Efficiency:** {burn_mult:.2f}x Burn Multiple</div>", unsafe_allow_html=True)
                 st.markdown(f"<div class='summary-line'>⏳ **3. Runway:** {metrics['runway_months']} Months</div>", unsafe_allow_html=True)
-                st.markdown(f"<div class='summary-line'>📢 **4. Marketing:** {metrics.get('ad_spend_pct', 0)*100:.1f}% of outflows</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='summary-line'>📢 **4. Ad Intensity:** {metrics.get('ad_spend_pct', 0)*100:.1f}% spend</div>", unsafe_allow_html=True)
             with col_s2:
                 st.markdown(f"<div class='summary-line'>🚩 **5. Risks:** {len(vendor_risks)} Operational Flags</div>", unsafe_allow_html=True)
                 st.markdown(f"<div class='summary-line'>📦 **6. Returns:** {metrics.get('return_rate', 0)*100:.1f}% Rate</div>", unsafe_allow_html=True)
@@ -91,14 +107,14 @@ if uploaded_file:
                 st.markdown(f"<div class='summary-line'>🎯 **8. Verdict:** {'Sustainable' if burn_mult < 1.5 else 'Audit Required'}</div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
-            # PART 7: KPI DASHBOARD
+            # PART 8: KPI DASHBOARD & VISUALS
             c1, c2, c3, c4 = st.columns(4)
             with c1: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Net Cash</div><div class='kpi-value'>₹{cash_now:,.0f}</div></div>", unsafe_allow_html=True)
             with c2: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Runway</div><div class='kpi-value'>{metrics['runway_months']} Mo</div></div>", unsafe_allow_html=True)
             with c3: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Burn Multiple</div><div class='kpi-value'>{burn_mult:.2f}x</div></div>", unsafe_allow_html=True)
             with c4: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>Ad Spend %</div><div class='kpi-value'>{metrics.get('ad_spend_pct', 0)*100:.1f}%</div></div>", unsafe_allow_html=True)
 
-            # PART 8: ANALYSIS & SEARCH
+            # SPEND ANALYSIS & SEARCH
             st.divider()
             col_pie, col_table = st.columns([2, 1])
             with col_pie: st.plotly_chart(px.pie(cat_df, values='amount', names='Category', hole=0.4), use_container_width=True)
