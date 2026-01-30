@@ -17,9 +17,11 @@ def get_real_ai_response(prompt, metrics, cash_now, burn_mult):
         api_key = st.session_state.get("gemini_api_key", "")
         if not api_key:
             return "⚠️ Please enter your Gemini API Key in the sidebar to activate the AI COO."
+
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash')
-        context = f"COO Agent Mode. Cash: {cash_now}, Burn: {burn_mult}x, Runway: {metrics.get('runway_months', 0)} Mo. Question: {prompt}"
+
+        context = f"You are a Virtual COO. Cash: INR {cash_now:,.0f}, Burn: {burn_mult:,.2f}x. Question: {prompt}"
         response = model.generate_content(context)
         return response.text
     except Exception as e:
